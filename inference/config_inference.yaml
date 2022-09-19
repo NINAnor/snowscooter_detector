@@ -45,7 +45,7 @@ OVERLAP: 0
 LABELS_FILE: "/app/assets/label_correspondance.json"
 
 # Folder containing the files that need predictions
-INPUT_PATH: '/Data/audioCLIP/tiny_preds'
+INPUT_PATH: '/Data/test_dataset/audio'
 
 # Folder that will contain the output of the predictions
 OUTPUT_PATH: '/Data/audioCLIP/results'

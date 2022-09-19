@@ -5,12 +5,7 @@ import librosa
 import warnings
 warnings.filterwarnings("ignore")
 
-def openAudioFile(path, sample_rate=44100, offset=0.0, duration=None):    
-    try:
-        sig, rate = librosa.load(path, sr=sample_rate, offset=offset, duration=duration, mono=True, res_type='kaiser_fast')
-    except:
-        sig, rate = [], sample_rate
-    return sig, rate
+from utils.audio_processing import openAudioFile
 
 if __name__ == "__main__":
 

@@ -1,3 +1,7 @@
+#########################################
+# SCRIPT USEFUL FOR THE AUDIOCLIP MODEL #
+#########################################
+
 import math
 
 import numpy as np
@@ -5,7 +9,7 @@ import numpy as np
 import torch
 import torchvision as tv
 
-import ignite_trainer as it
+import training.ignite_trainer as it
 
 
 def scale(old_value, old_min, old_max, new_min, new_max):

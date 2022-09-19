@@ -1,3 +1,5 @@
+import numpy as np
+
 import torch
 from torch import nn, optim
 from torch.nn import functional as F
@@ -7,13 +9,10 @@ from torch.optim.optimizer import Optimizer
 import pytorch_lightning as pl
 from pytorch_lightning.utilities.rank_zero import rank_zero_info
 from pytorch_lightning.callbacks.finetuning import BaseFinetuning
-
 from collections import Counter
 
 from model import AudioCLIP
 
-# For debug
-import numpy as np
 
 
 # See https://github.com/PyTorchLightning/pytorch-lightning/blob/master/pl_examples/domain_templates/computer_vision_fine_tuning.py

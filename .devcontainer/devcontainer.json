@@ -1,9 +1,9 @@
 {
 // Image to be used
-    "image": "registry.gitlab.com/nina-data/audioclip:latest",
+    "image": "audioclip",
 
     // Arguments -- GPUs in our case
-    "runArgs": ["--gpus", "all", "-v", "/home/benjamin.cretois/Code/AudioCLIP:/app", "--shm-size=1.02gb"],
+    "runArgs": ["--gpus", "all", "-v", "/home/benjamin.cretois/Code/AudioCLIP:/app", "-v", "/home/benjamin.cretois/Code/Data:/data", "--shm-size=1.02gb"],
 
     // Extensions (here python and Jupyter). To find the ID of the extension
     // 1) find extension 2) under the icon, look at identifier

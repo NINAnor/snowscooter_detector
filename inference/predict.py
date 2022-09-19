@@ -11,7 +11,7 @@ from torch.quantization import quantize_dynamic
 from torch.utils.data import DataLoader
 from yaml.loader import FullLoader
 
-from prediction_scripts._utils import AudioList
+from utils.utils_inference import AudioList
 
 def initModel(model_path):
     m = torch.load(model_path).eval()

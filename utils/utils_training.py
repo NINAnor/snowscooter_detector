@@ -2,17 +2,17 @@ import torchvision as tv
 import random
 
 from utils.audio_processing import openAudioFile, splitSignal
-from audiomentations import Compose, Normalize, SevenBandParametricEQ, TimeMask, FrequencyMask, Shift, AirAbsorption, AddGaussianNoise
+from audiomentations import Compose, SevenBandParametricEQ, TimeMask, FrequencyMask, Shift, AirAbsorption, AddGaussianNoise
 
-def transform_specifications(config):
+def transform_specifications(cfg):
 
     audio_transforms = Compose([
-        AddGaussianNoise(min_amplitude=0.001, max_amplitude=0.015, p=0.5),
-        SevenBandParametricEQ(p=0.5),
-        Shift(p=0.5),
-        AirAbsorption(p=0.5),
-        TimeMask(p=0.5),
-        FrequencyMask(p=0.5)
+        AddGaussianNoise(min_amplitude=cfg['GAUSSIAN_MIN_AMPLITUDE'], max_amplitude=cfg['GAUSSIAN_MIN_AMPLITUDE'], p=cfg['GAUSSIAN_P']),
+        SevenBandParametricEQ(p=cfg['P_SEVENBANDPARAMETRICEQ']),
+        Shift(cfg['P_SHIFT']),
+        AirAbsorption(cfg['P_AIR_ABSORPTION']),
+        TimeMask(cfg['P_TIME_MASK']),
+        FrequencyMask(cfg['P_FREQ_MASK'])
         ]
     )
     return audio_transforms

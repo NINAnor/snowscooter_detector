@@ -32,27 +32,27 @@ from ray.tune.suggest.bayesopt import BayesOptSearch
 
 from yaml.loader import FullLoader
 
-from lightning_trainer.datamodule import EncodeLabels
-from lightning_trainer.datamodule import AudioDataModule
-from lightning_trainer.trainingmodule import TransferTrainingModule
+from training.lightning_trainer.datamodule import EncodeLabels
+from training.lightning_trainer.datamodule import AudioDataModule
+from training.lightning_trainer.trainingmodule import TransferTrainingModule
 
-from lightning_trainer._utils import transform_specifications
-from lightning_trainer._utils import AudioList
+from utils.utils_training import transform_specifications
+from utils.utils_training import AudioList
 
 @mlflow_mixin
 def run(config):
     #############################
     # Create the data iterators #
     #############################
-    allFiles = [f for f in glob.glob(config["train_val_dataset_path"], recursive=True) if os.path.isfile(f)]
+    allFiles = [f for f in glob.glob(config["PATH_TRAIN_VAL_DATASET"], recursive=True) if os.path.isfile(f)]
     allFiles = [f for f in allFiles if f.endswith( (".WAV", ".wav", ".mp3") )]
 
     # Split allFiles into a training / validation split
-    train_samples = random.sample(allFiles, int(len(allFiles) * config["proportion_training"]))
+    train_samples = random.sample(allFiles, int(len(allFiles) * config["PROP_TRAINING"]))
     val_samples = [item for item in allFiles if item not in train_samples]
 
     # Instantiate the audio iterator class - cut the audio into segments
-    audio_list= AudioList(length_segments=config["length_segments"], sample_rate=config["sample_rate"])
+    audio_list= AudioList(length_segments=config["LENGTH_SEGMENTS"], sample_rate=config["SAMPLE_RATE"])
 
     list_train = audio_list.get_processed_list(train_samples)
     list_train = list(itertools.chain.from_iterable(list_train))
@@ -63,7 +63,7 @@ def run(config):
     ###########################
     # Create the labelEncoder #
     ###########################
-    label_encoder = EncodeLabels(path_to_folders=config["train_val_dataset_path"])
+    label_encoder = EncodeLabels(path_to_folders=config["PATH_TRAIN_VAL_DATASET"])
 
     # Save name of the folder and associated label in a json file
     l = label_encoder.__getLabels__()
@@ -81,7 +81,7 @@ def run(config):
     ########################
     # Define the callbacks #
     ########################
-    early_stopping = EarlyStopping(monitor="val_loss", patience=config["stopping_rule_patience"])
+    early_stopping = EarlyStopping(monitor="val_loss", patience=config["STOPPING_RULE_PATIENCE"])
 
     tune_callback = TuneReportCallback(
     {
@@ -139,16 +139,6 @@ def grid_search(config):
         "address": os.environ.get("IP_HEAD"),
         "ignore_reinit_error":True
     }
-    #host = os.environ["RAY_HOST"]
-    #if os.environ.get("RAY_MODE", "head") == "head":
-    #     options.update(**{
-    #        "_node_ip_address": host,
-    #     })
-
-    #else:
-    #     options.update(**{
-    #        "address": host
-    #     })
 
     ray.init(**options)
 
