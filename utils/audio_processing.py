@@ -3,12 +3,25 @@ import librosa
 
 RANDOM = np.random.RandomState(42)
 
+def openCachedFile(filesystem, path, sample_rate=48000, offset=0.0, duration=None):
+    
+    import tempfile
+    import shutil
+
+    bin = filesystem.openbin(path)
+
+    with tempfile.NamedTemporaryFile() as temp:
+        shutil.copyfileobj(bin, temp)
+        sig, rate = openAudioFile(temp.name, sample_rate, offset, duration)
+
+    return sig, rate
+
 def openAudioFile(path, sample_rate=44100, offset=0.0, duration=None):    
 
-    try:
-        sig, rate = librosa.load(path, sr=sample_rate, offset=offset, duration=duration, mono=True, res_type='kaiser_fast')
-    except:
-        sig, rate = [], sample_rate
+    #try:
+    sig, rate = librosa.load(path, sr=sample_rate, offset=offset, duration=duration, mono=True, res_type='kaiser_fast')
+    #except:
+    #    sig, rate = [], sample_rate
 
     return sig, rate
 

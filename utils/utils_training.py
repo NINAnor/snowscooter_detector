@@ -10,7 +10,7 @@ def transform_specifications(cfg):
         AddGaussianNoise(min_amplitude=cfg['GAUSSIAN_MIN_AMPLITUDE'], max_amplitude=cfg['GAUSSIAN_MIN_AMPLITUDE'], p=cfg['GAUSSIAN_P']),
         SevenBandParametricEQ(p=cfg['P_SEVENBANDPARAMETRICEQ']),
         Shift(cfg['P_SHIFT']),
-        AirAbsorption(cfg['P_AIR_ABSORPTION']),
+        #AirAbsorption(cfg['P_AIR_ABSORPTION']),
         TimeMask(cfg['P_TIME_MASK']),
         FrequencyMask(cfg['P_FREQ_MASK'])
         ]
