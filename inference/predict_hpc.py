@@ -31,15 +31,21 @@ def walk_audio(filesystem, input_path):
         for f in flist:
             yield fs.path.combine(path, f.name)
 
-def parseInputFiles(filesystem, input_path, workers, worker_idx):
+def parseInputFiles(filesystem, input_path, workers, worker_idx, array_job=False):
 
     print("Worker {}".format(workers))
     print("Worker_idx {}".format(worker_idx))
 
     files = []
-    for index, audiofile in enumerate(walk_audio(filesystem, input_path)):
-        if index%workers == worker_idx:
+
+    if array_job:
+        for index, audiofile in enumerate(walk_audio(filesystem, input_path)):
+            if index%workers == worker_idx:
+                files.append(audiofile)
+    else:
+        for index, audiofile in enumerate(walk_audio(filesystem, input_path)):
             files.append(audiofile)
+            
     print('Found {} files to analyze'.format(len(files)))
 
     return files
@@ -48,11 +54,6 @@ def initModel(model_path):
     m = torch.load(model_path).eval()
     m_q = quantize_dynamic(m, qconfig_spec={torch.nn.Linear, torch.nn.Conv2d}, dtype=torch.qint8)
     return m_q
-    
-def getPredLoader(input):
-    list_preds = AudioList().get_processed_list(input)
-    predLoader = DataLoader(list_preds, batch_size=1, num_workers=4, pin_memory=False)
-    return predLoader
 
 def predict(testLoader, model):
 
@@ -62,7 +63,7 @@ def predict(testLoader, model):
         tensor = torch.tensor(array)
         output = model(tensor)
         output = np.exp(output.detach().numpy())
-        proba_list.append(output[0])
+        proba_list.append(output[0][1])
 
     return proba_list
 
@@ -107,12 +108,14 @@ def write_results(prob_array, input, output):
         writer.writerow(header)
         writer.writerows(rows_for_csv)
 
-def analyzeFile(file_path, model, out_folder):
+def analyzeFile(filesystem, file_path, model, out_folder, batch_size=1, num_workers=1):
     # Start time
     start_time = datetime.datetime.now()
 
     # Run the predictions
-    predLoader = getPredLoader(file_path)
+    list_preds = AudioList().get_processed_list(filesystem, file_path)
+    predLoader = DataLoader(list_preds, batch_size=batch_size, num_workers=num_workers, pin_memory=False)
+
     pred_array = predict(predLoader, model)
     write_results(pred_array, file_path, out_folder)
 
@@ -135,14 +138,14 @@ if __name__ == "__main__":
 
     parser.add_argument("--num_worker",
                         help='Path to the config file',
-                        default=0,
+                        default=1,
                         required=False,
                         type=int,
                         )
 
     parser.add_argument("--worker_index",
                         help='Path to the config file',
-                        default=0,
+                        default=1,
                         required=False,
                         type=int,
                         )
@@ -165,21 +168,18 @@ if __name__ == "__main__":
 
     flist = []
     for f in file_list:
-        flist.append((f, cfg.getConfig()))
-
-    # Glob the audio files
-    flist = [f for f in glob.glob(cfg["INPUT_PATH"] + "/**/*", recursive=True) if os.path.isfile(f)]
+        flist.append(f)
     print("Found {} files to analyze".format(len(flist)))
 
     # Analyze files
     if cfg["CPU_THREADS"] < 2:
         for entry in flist:
-            try:
-                analyzeFile(entry, model, cfg["OUTPUT_PATH"])
-            except:
-                print("File {} failed to be analyzed".format(entry))
+            #try:
+            analyzeFile(myfs, entry, model, cfg["OUTPUT_PATH"], batch_size=1, num_workers=1)
+            #except:
+            #    print("File {} failed to be analyzed".format(entry))
     else:
         with Pool(cfg["CPU_THREADS"]) as p:
-            p.map(analyzeFile, flist, model, cfg["OUTPUT_PATH"])
+            p.map(analyzeFile, myfs, flist, model, cfg["OUTPUT_PATH"], batch_size=1, num_workers=1)
 
 # docker run --rm -it -v $pwd:/app/ -v ~/Data/:/Data registry.gitlab.com/nina-data/audioclip:latest poetry run python prediction_scripts/predict.py
