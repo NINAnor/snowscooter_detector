@@ -6,31 +6,68 @@ import os
 import glob
 import yaml
 import csv
+import fs
 
 from torch.quantization import quantize_dynamic
 from torch.utils.data import DataLoader
 from yaml.loader import FullLoader
+from multiprocessing import Pool
+from fs.sshfs import SSHFS
 
 from utils.utils_inference import AudioList
 
-def initModel(model_path):
-    m = torch.load(model_path).eval()
-    m_q = quantize_dynamic(m, qconfig_spec={torch.nn.Linear, torch.nn.Conv2d}, dtype=torch.qint8)
-    return m_q
-    
-def getPredLoader(input):
-    list_preds = AudioList().get_processed_list(input)
-    predLoader = DataLoader(list_preds, batch_size=1, num_workers=4, pin_memory=False)
-    return predLoader
+def doConnection(connection_string): #host, user, password
 
-def predict(testLoader, model):
+    myfs = fs.open_fs(connection_string)
+
+    #myfs = SSHFS(
+    #    host=host, user=user, passwd=password, pkey=None, timeout=20, port=22,
+    #    keepalive=10, compress=False, config_path='~/.ssh/config')
+    #print("Connection to the input folder has been successfully made")
+    return myfs
+
+def walk_audio(filesystem, input_path):
+    # Get all files in directory with os.walk
+    walker = filesystem.walk(input_path, filter=['*.wav', '*.flac', '*.mp3', '*.ogg', '*.m4a', '*.WAV', '*.MP3'])
+    for path, dirs, flist in walker:
+        for f in flist:
+            yield fs.path.combine(path, f.name)
+
+def parseInputFiles(filesystem, input_path, workers, worker_idx, array_job=False):
+
+    print("Worker {}".format(workers))
+    print("Worker_idx {}".format(worker_idx))
+
+    files = []
+
+    if array_job:
+        for index, audiofile in enumerate(walk_audio(filesystem, input_path)):
+            if index%workers == worker_idx:
+                files.append(audiofile)
+    else:
+        for index, audiofile in enumerate(walk_audio(filesystem, input_path)):
+            files.append(audiofile)
+            
+    print('Found {} files to analyze'.format(len(files)))
+
+    return files
+
+def initModel(model_path, device):
+    m = torch.load(model_path).eval()
+    m = m.to(device)
+    print("Model on {}".format(device))
+    #m_q = quantize_dynamic(m, qconfig_spec={torch.nn.Linear, torch.nn.Conv2d}, dtype=torch.qint8)
+    return m
+
+def predict(testLoader, model, device):
 
     proba_list = []
 
     for array in testLoader:
         tensor = torch.tensor(array)
+        tensor = tensor.to(device)
         output = model(tensor)
-        output = np.exp(output.detach().numpy())
+        output = np.exp(output.cpu().detach().numpy())
         proba_list.append(output[0])
 
     return proba_list
@@ -76,13 +113,15 @@ def write_results(prob_array, input, output):
         writer.writerow(header)
         writer.writerows(rows_for_csv)
 
-def analyzeFile(file_path, model, out_folder):
+def analyzeFile(filesystem, file_path, model, out_folder, device, batch_size=1, num_workers=1):
     # Start time
     start_time = datetime.datetime.now()
 
     # Run the predictions
-    predLoader = getPredLoader(file_path)
-    pred_array = predict(predLoader, model)
+    list_preds = AudioList().get_processed_list(filesystem, file_path)
+    predLoader = DataLoader(list_preds, batch_size=batch_size, num_workers=num_workers, pin_memory=False)
+
+    pred_array = predict(predLoader, model, device)
     write_results(pred_array, file_path, out_folder)
 
     # Give the tim it took to analyze file
@@ -97,9 +136,23 @@ if __name__ == "__main__":
 
     parser.add_argument("--config",
                         help='Path to the config file',
-                        default="/app/prediction_scripts/config.yaml",
+                        default="/app/config_inference.yaml",
                         required=False,
                         type=str,
+                        )
+
+    parser.add_argument("--num_worker",
+                        help='Path to the config file',
+                        default=1,
+                        required=False,
+                        type=int,
+                        )
+
+    parser.add_argument("--worker_index",
+                        help='Path to the config file',
+                        default=1,
+                        required=False,
+                        type=int,
                         )
 
     cli_args = parser.parse_args()
@@ -109,14 +162,23 @@ if __name__ == "__main__":
         cfg = yaml.load(f, Loader=FullLoader)
 
     # Initiate model
-    model = initModel(model_path=cfg["MODEL"])
+    model = initModel(model_path=cfg["MODEL"], device=cfg["DEVICE"])
 
-    # Glob the audio files
-    allFiles = [f for f in glob.glob(cfg["INPUT_PATH"] + "/**/*", recursive=True) if os.path.isfile(f)]
-    print("Found {} files to analyze".format(len(allFiles)))
+    # Do the connection to server
+    myfs = doConnection(cfg["CONNECTION_STRING"])
+    if not myfs:  # Nothing available
+        exit(0)
 
-    # Make the predictions and write results
-    for file_path in allFiles:
-        analyzeFile(file_path, model, cfg["OUTPUT_PATH"])
+    file_list = parseInputFiles(myfs, cfg["INPUT_PATH"], cli_args.num_worker, cli_args.worker_index)  
+
+    flist = []
+    for f in file_list:
+        flist.append(f)
+    print("Found {} files to analyze".format(len(flist)))
+
+    # Analyze files
+    for entry in flist:
+        analyzeFile(myfs, entry, model, cfg["OUTPUT_PATH"],  device=cfg["DEVICE"], batch_size=1, num_workers=1)
+            #print("File {} failed to be analyzed".format(entry))
 
 # docker run --rm -it -v $pwd:/app/ -v ~/Data/:/Data registry.gitlab.com/nina-data/audioclip:latest poetry run python prediction_scripts/predict.py
