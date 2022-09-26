@@ -16,14 +16,9 @@ from fs.sshfs import SSHFS
 
 from utils.utils_inference import AudioList
 
-def doConnection(connection_string): #host, user, password
+def doConnection(connection_string):
 
     myfs = fs.open_fs(connection_string)
-
-    #myfs = SSHFS(
-    #    host=host, user=user, passwd=password, pkey=None, timeout=20, port=22,
-    #    keepalive=10, compress=False, config_path='~/.ssh/config')
-    #print("Connection to the input folder has been successfully made")
     return myfs
 
 def walk_audio(filesystem, input_path):
@@ -118,6 +113,9 @@ def analyzeFile(filesystem, file_path, model, out_folder, device, batch_size=1, 
     start_time = datetime.datetime.now()
 
     # Run the predictions
+    print(filesystem)
+    print(file_path)
+
     list_preds = AudioList().get_processed_list(filesystem, file_path)
     predLoader = DataLoader(list_preds, batch_size=batch_size, num_workers=num_workers, pin_memory=False)
 
@@ -155,6 +153,13 @@ if __name__ == "__main__":
                         type=int,
                         )
 
+    parser.add_argument("--array_job",
+                        help='Are you submitted an array job?',
+                        default=False,
+                        required=False,
+                        type=str,
+                        )
+
     cli_args = parser.parse_args()
 
     # Open the config file
@@ -169,7 +174,7 @@ if __name__ == "__main__":
     if not myfs:  # Nothing available
         exit(0)
 
-    file_list = parseInputFiles(myfs, cfg["INPUT_PATH"], cli_args.num_worker, cli_args.worker_index)  
+    file_list = parseInputFiles(myfs, cfg["INPUT_PATH"], cli_args.num_worker, cli_args.worker_index, array_job=cli_args.array_job)  
 
     flist = []
     for f in file_list:
@@ -180,5 +185,3 @@ if __name__ == "__main__":
     for entry in flist:
         analyzeFile(myfs, entry, model, cfg["OUTPUT_PATH"],  device=cfg["DEVICE"], batch_size=1, num_workers=1)
             #print("File {} failed to be analyzed".format(entry))
-
-# docker run --rm -it -v $pwd:/app/ -v ~/Data/:/Data registry.gitlab.com/nina-data/audioclip:latest poetry run python prediction_scripts/predict.py

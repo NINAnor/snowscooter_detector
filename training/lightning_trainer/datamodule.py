@@ -6,7 +6,7 @@ from sklearn.preprocessing import LabelEncoder
 from torch.utils.data import DataLoader, random_split
 from torch.utils.data import Dataset
 
-from lightning_trainer.sampler import ImbalancedDatasetSampler
+from training.lightning_trainer.sampler import ImbalancedDatasetSampler
 
 class EncodeLabels():
     """

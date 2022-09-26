@@ -91,7 +91,7 @@ def run(config):
     on="validation_end")
 
     checkpoints_callback = ModelCheckpoint(
-        dirpath=config["path_lightning_metrics"],
+        dirpath=config["PATH_LIGHTNING_METRICS"],
         monitor="val_loss",
         filename="ckpt-{epoch:02d}-{val_loss:.2f}")
 
@@ -101,24 +101,24 @@ def run(config):
     transform = transform_specifications(config)
 
     trainLoader, valLoader = AudioDataModule(list_train, list_val, label_encoder, 
-                                batch_size=config["batch_size"],
-                                num_workers=config["num_workers"],
-                                pin_memory=config["pin_memory"],
+                                batch_size=config["BATCH_SIZE"],
+                                num_workers=config["NUM_WORKERS"],
+                                pin_memory=config["PIN_MEMORY"],
                                 transform=transform,
                                 sampler=True # Should we oversample the training set?
                                 ).train_val_loader()
 
 
     # Customize the training (add GPUs, callbacks ...)
-    trainer = pl.Trainer(default_root_dir=config["path_lightning_metrics"], 
+    trainer = pl.Trainer(default_root_dir=config["PATH_LIGHTNING_METRICS"], 
                         #logger=TensorBoardLogger(save_dir=tune.get_trial_dir(), name="", version="."),
-                        max_epochs=config["n_epoch"],
+                        max_epochs=config["N_EPOCHS"],
                         callbacks=[tune_callback, early_stopping, checkpoints_callback],
-                        accelerator=config["accelerator"]) 
+                        accelerator=config["ACCELERATOR"]) 
     #trainer.save_checkpoint("example.ckpt")
 
     # Parameters for the training loop
-    training_loop = TransferTrainingModule(learning_rate=config["learning_rate"], num_target_classes=config["num_target_classes"])
+    training_loop = TransferTrainingModule(learning_rate=config["LEARNING_RATE"], num_target_classes=config["NUM_TARGET_CLASSES"])
 
     # Finally train the model
     #with mlflow.start_run(experiment_id=config["current_experiment"]) as run:
@@ -132,13 +132,24 @@ def grid_search(config):
     print("HEAD NODE IP: {}".format(IP_HEAD_NODE))
 
     print("Ask for worker")
-    options = {
-        "object_store_memory": 10**9,
-        "_temp_dir": "/rds/general/user/ss7412/home/AudioCLIP/",
-        "_node_ip_address": IP_HEAD_NODE, #"address":"auto",
-        "address": os.environ.get("IP_HEAD"),
-        "ignore_reinit_error":True
-    }
+
+    # To run on HPC
+    if IP_HEAD_NODE == None:
+        options = {
+            "object_store_memory": 10**9,
+            "_temp_dir": "/rds/general/user/ss7412/home/AudioCLIP/",
+            "address":"auto",
+            "ignore_reinit_error":True
+        }
+    # To run locally
+    else: 
+        options = {
+            "object_store_memory": 10**9,
+            "_temp_dir": "/rds/general/user/ss7412/home/AudioCLIP/",
+            "_node_ip_address": IP_HEAD_NODE, 
+            "address": os.environ.get("IP_HEAD_NODE"),
+            "ignore_reinit_error":True
+        }
 
     ray.init(**options)
 
@@ -155,7 +166,7 @@ def grid_search(config):
         parameter_columns=["learning_rate", "batch_size"],
         metric_columns=["loss", "mean_accuracy", "training_iteration"])
 
-    resources_per_trial = {"cpu": config["n_cpu_per_trials"], "gpu": config["n_gpu_per_trials"]}
+    resources_per_trial = {"cpu": config["N_CPU_PER_TRIAL"], "gpu": config["N_GPU_PER_TRIAL"]}
 
     trainable = tune.with_parameters(run)
 
@@ -165,11 +176,11 @@ def grid_search(config):
         metric="loss",
         mode="min",
         config=config,
-        num_samples=config["n_sampling"], # Number of times to sample from the hyperparameter space
+        num_samples=config["N_SAMPLING"], # Number of times to sample from the hyperparameter space
         scheduler=scheduler,
         progress_reporter=reporter,
-        name=config["name_experiment"],
-        local_dir="/rds/general/user/ss7412/home/AudioCLIP/")
+        name=config["NAME_EXPERIMENT"],
+        local_dir=config["LOCAL_DIR"])
         #search_alg=algo)
 
     print("Best hyperparameters found were: ", analysis.best_config)
@@ -185,7 +196,7 @@ if __name__ == "__main__":
     parser.add_argument("--config",
                         help="Path to the config file",
                         required=False,
-                        default="/app/lightning_trainer/config.yaml",
+                        default="/app/config_training.yaml",
                         type=str
     )
     
@@ -206,7 +217,7 @@ if __name__ == "__main__":
     config["mlflow"]["tracking_uri"] = eval(config["mlflow"]["tracking_uri"])
 
     # Set the MLflow experiment, or create it if it does not exist.
-    mlflow.set_tracking_uri(None)
+    mlflow.set_tracking_uri()
     mlflow.set_experiment(config["mlflow"]["experiment_name"])
 
 
@@ -214,7 +225,7 @@ if __name__ == "__main__":
         #for key in ('learning_rate'): # , 'batch_size'
             #config[key] = eval(config[key])
         print("Begin the parameter search")
-        config["learning_rate"] = eval(config["learning_rate"])
+        config["LEARNING_RATE"] = eval(config["LEARNING_RATE"])
         results = grid_search.remote(config)
         assert ray.get(results) == 1
     else:
