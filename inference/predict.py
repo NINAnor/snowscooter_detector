@@ -67,7 +67,21 @@ def predict(testLoader, model, device):
 
     return proba_list
 
-def write_results(prob_array, input, output):
+def get_outname(input, output):
+
+    # Get a name for the output // if there are multiple "." in the list
+    # only remove the extension
+    filename = input.split("/")[-1].split(".")
+    if len(filename) > 2:
+        filename = ".".join(filename[0:-1])
+    else:
+        filename = input.split("/")[-1].split(".")[0]
+
+    outname = os.sep.join([output, filename + '.csv'])
+
+    return outname
+
+def write_results(prob_array, outname):
 
     # Store the array result in a CSV friendly format
     rows_for_csv = []
@@ -90,16 +104,6 @@ def write_results(prob_array, input, output):
         # Update the start time of the detection
         idx_begin = idx_end
 
-    # Get a name for the output // if there are multiple "." in the list
-    # only remove the extension
-    filename = input.split("/")[-1].split(".")
-    if len(filename) > 2:
-        filename = ".".join(filename[0:-1])
-    else:
-        filename = input.split("/")[-1].split(".")[0]
-
-    outname = os.sep.join([output, filename + '.csv'])
-
     with open(outname, 'w') as file:
 
         writer = csv.writer(file)
@@ -112,19 +116,22 @@ def analyzeFile(filesystem, file_path, model, out_folder, device, batch_size=1, 
     # Start time
     start_time = datetime.datetime.now()
 
-    # Run the predictions
-    print(filesystem)
-    print(file_path)
+    # Check if the output already exists
+    outname = get_outname(file_path, out_folder)
 
-    list_preds = AudioList().get_processed_list(filesystem, file_path)
-    predLoader = DataLoader(list_preds, batch_size=batch_size, num_workers=num_workers, pin_memory=False)
+    if os.path.exists(outname):
+        print("File {} already exists".format(outname))
+    else:
+        # Run the predictions
+        list_preds = AudioList().get_processed_list(filesystem, file_path)
+        predLoader = DataLoader(list_preds, batch_size=batch_size, num_workers=num_workers, pin_memory=False)
 
-    pred_array = predict(predLoader, model, device)
-    write_results(pred_array, file_path, out_folder)
+        pred_array = predict(predLoader, model, device)
+        write_results(pred_array, outname)
 
-    # Give the tim it took to analyze file
-    delta_time = (datetime.datetime.now() - start_time).total_seconds()
-    print('Finished {} in {:.2f} seconds'.format(file_path, delta_time), flush=True)
+        # Give the tim it took to analyze file
+        delta_time = (datetime.datetime.now() - start_time).total_seconds()
+        print('Finished {} in {:.2f} seconds'.format(file_path, delta_time), flush=True)
 
 if __name__ == "__main__":
 
@@ -183,5 +190,6 @@ if __name__ == "__main__":
 
     # Analyze files
     for entry in flist:
+        print("Analysing {}".format(entry))
         analyzeFile(myfs, entry, model, cfg["OUTPUT_PATH"],  device=cfg["DEVICE"], batch_size=1, num_workers=1)
             #print("File {} failed to be analyzed".format(entry))
