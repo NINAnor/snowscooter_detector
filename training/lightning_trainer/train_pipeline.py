@@ -15,12 +15,12 @@ import os
 import mlflow.pytorch
 import json
 import logging
+import fs
 
 import itertools
 
 from pytorch_lightning.callbacks.early_stopping import EarlyStopping
 from pytorch_lightning.callbacks import ModelCheckpoint
-#from pytorch_lightning.loggers import TensorBoardLogger
 
 import ray
 from ray import tune
@@ -39,20 +39,52 @@ from training.lightning_trainer.trainingmodule import TransferTrainingModule
 from utils.utils_training import transform_specifications
 from utils.utils_training import AudioList
 
+def doConnection(connection_string):
+
+    if connection_string is False:
+        myfs = False
+    else:
+        myfs = fs.open_fs(connection_string)
+    return myfs
+
+def walk_audio(filesystem, input_path):
+    
+    walker = filesystem.walk(input_path, filter=['*.wav', '*.flac', '*.mp3', '*.ogg', '*.m4a', '*.WAV', '*.MP3'])
+    for path, dirs, flist in walker:
+        for f in flist:
+            yield fs.path.combine(path, f.name)
+
+def parseInputFiles(filesystem, input_path):
+
+    if filesystem is False:
+        files = [f for f in glob.glob(input_path + "/**/*", recursive=True) if os.path.isfile(f)]
+        files = [f for f in files if f.endswith( (".WAV", ".wav", ".mp3") )]
+    else:
+        files = []
+        for index, audiofile in enumerate(walk_audio(filesystem, input_path)):
+            files.append(audiofile)
+            
+    print('Found {} files for training'.format(len(files)))
+
+    return files
+
 @mlflow_mixin
 def run(config):
     #############################
     # Create the data iterators #
     #############################
-    allFiles = [f for f in glob.glob(config["PATH_TRAIN_VAL_DATASET"], recursive=True) if os.path.isfile(f)]
-    allFiles = [f for f in allFiles if f.endswith( (".WAV", ".wav", ".mp3") )]
+
+    # Do the connection to server
+    myfs = doConnection(config["CONNECTION_STRING"])
+
+    train_val_files = parseInputFiles(myfs, config["PATH_TRAIN_VAL_DATASET"])  
 
     # Split allFiles into a training / validation split
-    train_samples = random.sample(allFiles, int(len(allFiles) * config["PROP_TRAINING"]))
-    val_samples = [item for item in allFiles if item not in train_samples]
+    train_samples = random.sample(train_val_files, int(len(train_val_files) * config["PROP_TRAINING"]))
+    val_samples = [item for item in train_val_files if item not in train_samples]
 
     # Instantiate the audio iterator class - cut the audio into segments
-    audio_list= AudioList(length_segments=config["LENGTH_SEGMENTS"], sample_rate=config["SAMPLE_RATE"])
+    audio_list= AudioList(length_segments=config["LENGTH_SEGMENTS"], sample_rate=config["SAMPLE_RATE"], filesystem=myfs)
 
     list_train = audio_list.get_processed_list(train_samples)
     list_train = list(itertools.chain.from_iterable(list_train))
@@ -111,7 +143,6 @@ def run(config):
 
     # Customize the training (add GPUs, callbacks ...)
     trainer = pl.Trainer(default_root_dir=config["PATH_LIGHTNING_METRICS"], 
-                        #logger=TensorBoardLogger(save_dir=tune.get_trial_dir(), name="", version="."),
                         max_epochs=config["N_EPOCHS"],
                         callbacks=[tune_callback, early_stopping, checkpoints_callback],
                         accelerator=config["ACCELERATOR"]) 
@@ -133,15 +164,15 @@ def grid_search(config):
 
     print("Ask for worker")
 
-    # To run on HPC
+    # To run locally
     if IP_HEAD_NODE == None:
         options = {
             "object_store_memory": 10**9,
-            "_temp_dir": "/rds/general/user/ss7412/home/AudioCLIP/",
+            "_temp_dir": "/app/",
             "address":"auto",
             "ignore_reinit_error":True
         }
-    # To run locally
+    # To run one HPC
     else: 
         options = {
             "object_store_memory": 10**9,
@@ -217,7 +248,6 @@ if __name__ == "__main__":
     config["mlflow"]["tracking_uri"] = eval(config["mlflow"]["tracking_uri"])
 
     # Set the MLflow experiment, or create it if it does not exist.
-    mlflow.set_tracking_uri()
     mlflow.set_experiment(config["mlflow"]["experiment_name"])
 
 
