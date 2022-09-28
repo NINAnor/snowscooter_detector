@@ -156,7 +156,7 @@ def run(config):
     mlflow.pytorch.autolog(log_models = True)
     trainer.fit(training_loop, trainLoader, valLoader) 
 
-@ray.remote(num_gpus=1)
+@ray.remote(num_gpus=0.5)
 def grid_search(config):
 
     IP_HEAD_NODE = os.environ.get("IP_HEAD")
@@ -194,7 +194,7 @@ def grid_search(config):
     #algo = BayesOptSearch(random_search_steps=4, mode="min")
 
     reporter = CLIReporter(
-        parameter_columns=["learning_rate", "batch_size"],
+        parameter_columns=["LEARNING_RATE", "BATCH_SIZE"],
         metric_columns=["loss", "mean_accuracy", "training_iteration"])
 
     resources_per_trial = {"cpu": config["N_CPU_PER_TRIAL"], "gpu": config["N_GPU_PER_TRIAL"]}

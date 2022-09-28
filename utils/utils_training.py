@@ -9,7 +9,7 @@ def transform_specifications(cfg):
     if cfg["IS_BG_NOISE"]:
 
         audio_transforms = Compose([
-            AddBackgroundNoise(sound_path=cfg["PATH_BG_NOISE"]),
+            AddBackgroundNoise(sounds_path=cfg["PATH_BG_NOISE"]),
             SevenBandParametricEQ(p=cfg['P_SEVENBANDPARAMETRICEQ']),
             Shift(cfg['P_SHIFT']),
             #AirAbsorption(cfg['P_AIR_ABSORPTION']),
@@ -21,7 +21,7 @@ def transform_specifications(cfg):
     elif cfg["IS_SHORT_NOISES"]:
 
         audio_transforms = Compose([
-            AddShortNoises(sound_path=cfg["PATH_SHORT_NOISES"]),
+            AddShortNoises(sounds_path=cfg["PATH_SHORT_NOISES"]),
             SevenBandParametricEQ(p=cfg['P_SEVENBANDPARAMETRICEQ']),
             Shift(cfg['P_SHIFT']),
             #AirAbsorption(cfg['P_AIR_ABSORPTION']),
@@ -33,8 +33,8 @@ def transform_specifications(cfg):
     elif cfg["IS_SHORT_NOISES"] and cfg["IS_BG_NOISE"]:
 
         audio_transforms = Compose([
-            AddBackgroundNoise(sound_path=cfg["PATH_BG_NOISE"]),
-            AddShortNoises(sound_path=cfg["PATH_SHORT_NOISES"]),
+            AddBackgroundNoise(sounds_path=cfg["PATH_BG_NOISE"]),
+            AddShortNoises(sounds_path=cfg["PATH_SHORT_NOISES"]),
             SevenBandParametricEQ(p=cfg['P_SEVENBANDPARAMETRICEQ']),
             Shift(cfg['P_SHIFT']),
             #AirAbsorption(cfg['P_AIR_ABSORPTION']),

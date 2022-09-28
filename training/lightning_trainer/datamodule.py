@@ -19,7 +19,7 @@ class EncodeLabels():
         self._labels_name()
 
     def _labels_name(self):
-        labels = glob.glob(self.path_to_folders)
+        labels = glob.glob(self.path_to_folders + "/*")
         labels = [l.split("/")[-1] for l in labels]
         self.class_encode.fit(labels)
         

@@ -1,11 +1,4 @@
-import torch
-import numpy as np
-
-from torch.utils.data import Dataset
-
-from utils.audio_processing import openCachedFile, splitSignal, noise
-
-RANDOM = np.random.RandomState(42)
+from utils.audio_processing import openAudioFile, openCachedFile, splitSignal, noise
 
 # Difference with testing is that it uses pyfilesystem to fetch the files
 # to predict on.
@@ -19,7 +12,10 @@ class AudioList():
         
     def read_audio(self, filesystem, audio_path):
         """Read the audio, change the sample rate and randomly pick one channel"""
-        sig, _ = openCachedFile(filesystem, audio_path, sample_rate=self.sample_rate)
+        if filesystem is False:
+            sig, _ = openAudioFile(audio_path, sample_rate=self.sample_rate)
+        else:
+            sig, _ = openCachedFile(filesystem, audio_path, sample_rate=self.sample_rate)
         return sig
 
     def split_segment(self, array):
