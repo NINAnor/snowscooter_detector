@@ -6,13 +6,26 @@ from audiomentations import Compose, SevenBandParametricEQ, TimeMask, FrequencyM
 
 def transform_specifications(cfg):
 
-    if cfg["IS_BG_NOISE"]:
+    if cfg["IS_SHORT_NOISES"] and cfg["IS_BG_NOISE"]:
+
+        audio_transforms = Compose([
+            AddBackgroundNoise(sounds_path=cfg["PATH_BG_NOISE"]),
+            AddShortNoises(sounds_path=cfg["PATH_SHORT_NOISES"]),
+            SevenBandParametricEQ(p=cfg['P_SEVENBANDPARAMETRICEQ']),
+            Shift(cfg['P_SHIFT']),
+            AirAbsorption(p=cfg['P_AIR_ABSORPTION'], min_temperature=10, max_temperature=20),
+            TimeMask(cfg['P_TIME_MASK']),
+            FrequencyMask(cfg['P_FREQ_MASK'])
+            ]
+        )
+
+    elif cfg["IS_BG_NOISE"]:
 
         audio_transforms = Compose([
             AddBackgroundNoise(sounds_path=cfg["PATH_BG_NOISE"]),
             SevenBandParametricEQ(p=cfg['P_SEVENBANDPARAMETRICEQ']),
             Shift(cfg['P_SHIFT']),
-            #AirAbsorption(cfg['P_AIR_ABSORPTION']),
+            AirAbsorption(p=cfg['P_AIR_ABSORPTION'], min_temperature=10, max_temperature=20),
             TimeMask(cfg['P_TIME_MASK']),
             FrequencyMask(cfg['P_FREQ_MASK'])
             ]
@@ -24,32 +37,18 @@ def transform_specifications(cfg):
             AddShortNoises(sounds_path=cfg["PATH_SHORT_NOISES"]),
             SevenBandParametricEQ(p=cfg['P_SEVENBANDPARAMETRICEQ']),
             Shift(cfg['P_SHIFT']),
-            #AirAbsorption(cfg['P_AIR_ABSORPTION']),
-            TimeMask(cfg['P_TIME_MASK']),
-            FrequencyMask(cfg['P_FREQ_MASK'])
-            ]
-        )
-
-    elif cfg["IS_SHORT_NOISES"] and cfg["IS_BG_NOISE"]:
-
-        audio_transforms = Compose([
-            AddBackgroundNoise(sounds_path=cfg["PATH_BG_NOISE"]),
-            AddShortNoises(sounds_path=cfg["PATH_SHORT_NOISES"]),
-            SevenBandParametricEQ(p=cfg['P_SEVENBANDPARAMETRICEQ']),
-            Shift(cfg['P_SHIFT']),
-            #AirAbsorption(cfg['P_AIR_ABSORPTION']),
+            AirAbsorption(p=cfg['P_AIR_ABSORPTION'], min_temperature=10, max_temperature=20),
             TimeMask(cfg['P_TIME_MASK']),
             FrequencyMask(cfg['P_FREQ_MASK'])
             ]
         )
 
     else: 
-
         audio_transforms = Compose([
             AddGaussianNoise(min_amplitude=cfg['GAUSSIAN_MIN_AMPLITUDE'], max_amplitude=cfg['GAUSSIAN_MIN_AMPLITUDE'], p=cfg['GAUSSIAN_P']),
             SevenBandParametricEQ(p=cfg['P_SEVENBANDPARAMETRICEQ']),
             Shift(cfg['P_SHIFT']),
-            #AirAbsorption(cfg['P_AIR_ABSORPTION']),
+            AirAbsorption(p=cfg['P_AIR_ABSORPTION'], min_temperature=10, max_temperature=20),
             TimeMask(cfg['P_TIME_MASK']),
             FrequencyMask(cfg['P_FREQ_MASK'])
             ]
