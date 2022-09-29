@@ -4,14 +4,17 @@
 
 Please make sure that the correct parameters are set on the `config_training.yaml` if you are going to train a model or `config_inference` if you are planning to use the model to detect snowscooters.
 
+:star: Please note our scripts support [PyfileSystem](https://www.pyfilesystem.org/). This means that it is possible to add a `CONNECTION_STRING` argument in the form `user:password@host`  in `config_inference` or `config_training` for the scripts to fetch the data on your remote server.
+
+:star: **If your data is stored locally** simply set `CONNECTION_STRING` to `False`.
+
 ### Installation using Docker
 
 1. Clone the repository:
 
-``````
+```
 git clone https://github.com/NINAnor/snowscooter_detector
 ```
-
 
 2. Build the image
 
@@ -30,22 +33,15 @@ singularity build
 
 ### Train model
 
+To train a model, simply update the path and the parameters in the `config_training.yaml` and run `train.sh`.
+
+As of now, `train.sh` can only be used with `docker` and you need to specify the path that contains your data (training data + short noises and background noises if you have any) so that it can be mounted in the container. The command should look like:
+
+```
+./train.sh /PATH/CONTAINING/ALL/DATA
+```
 
 ### Predict on new files
-
-1. PyfileSystem
-
-Please note that we are using [PyfileSystem](https://www.pyfilesystem.org/)  in `inference/predict.py` to make the scripts agnostic to files location. This means that in the `config` files you will find the parameters `CONNECTION_STRING` and `INPUT_PATH`.
-
-If the training data or the data you want to be predicted are located on a remote server the `CONNECTION_STRING` should contain the connection protocol, user, password and host and should be in the form:
-
-```
-ssh://[user[:password]@]host[:port]
-```
-
-If the data is stored locally, simply set `CONNECTION_STRING` to `None`
-
-2. Running the prediction script
 
 ```
 OUT_FOLDER=results
