@@ -18,7 +18,10 @@ from utils.utils_inference import AudioList
 
 def doConnection(connection_string):
 
-    myfs = fs.open_fs(connection_string)
+    if connection_string is False:
+        myfs = False
+    else:
+        myfs = fs.open_fs(connection_string)
     return myfs
 
 def walk_audio(filesystem, input_path):
@@ -30,18 +33,33 @@ def walk_audio(filesystem, input_path):
 
 def parseInputFiles(filesystem, input_path, workers, worker_idx, array_job=False):
 
+    files = []
+
     print("Worker {}".format(workers))
     print("Worker_idx {}".format(worker_idx))
 
-    files = []
+    if filesystem:
 
-    if array_job:
-        for index, audiofile in enumerate(walk_audio(filesystem, input_path)):
-            if index%workers == worker_idx:
+        if array_job:
+            for index, audiofile in enumerate(walk_audio(filesystem, input_path)):
+                if index%workers == worker_idx:
+                    files.append(audiofile)
+        else:
+            for index, audiofile in enumerate(walk_audio(filesystem, input_path)):
                 files.append(audiofile)
+
     else:
-        for index, audiofile in enumerate(walk_audio(filesystem, input_path)):
-            files.append(audiofile)
+
+        files = [f for f in glob.glob(input_path + "/**/*", recursive=True) if os.path.isfile(f)]
+        files = [f for f in files if f.endswith( (".WAV", ".wav", ".mp3") )]
+
+        if array_job:
+            for index, audiofile in enumerate(files):
+                if index%workers == worker_idx:
+                    files.append(audiofile)
+
+        else:
+            files = files
             
     print('Found {} files to analyze'.format(len(files)))
 
@@ -177,9 +195,8 @@ if __name__ == "__main__":
     model = initModel(model_path=cfg["MODEL"], device=cfg["DEVICE"])
 
     # Do the connection to server
+    print("Connecting to {}".format(cfg["CONNECTION_STRING"]))
     myfs = doConnection(cfg["CONNECTION_STRING"])
-    if not myfs:  # Nothing available
-        exit(0)
 
     file_list = parseInputFiles(myfs, cfg["INPUT_PATH"], cli_args.num_worker, cli_args.worker_index, array_job=cli_args.array_job)  
 
@@ -191,5 +208,7 @@ if __name__ == "__main__":
     # Analyze files
     for entry in flist:
         print("Analysing {}".format(entry))
+        #try:
         analyzeFile(myfs, entry, model, cfg["OUTPUT_PATH"],  device=cfg["DEVICE"], batch_size=1, num_workers=1)
-            #print("File {} failed to be analyzed".format(entry))
+        #except:
+        #    print("File {} failed to be analyzed".format(entry))

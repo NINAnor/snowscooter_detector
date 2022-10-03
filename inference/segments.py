@@ -4,11 +4,63 @@ import argparse
 import traceback
 import numpy as np
 import yaml
+import fs
 
 from yaml import FullLoader
 
-from utils import audio_processing
-from utils.parsing_utils import remove_extension, parseFolders
+from utils.audio_processing import openCachedFile, openAudioFile, saveSignal
+from utils.parsing_utils import remove_extension
+
+def doConnection(connection_string):
+
+    if connection_string is False:
+        myfs = False
+    else:
+        myfs = fs.open_fs(connection_string)
+    return myfs
+
+def walk_audio(filesystem, input_path):
+    # Get all files in directory with os.walk
+    walker = filesystem.walk(input_path, filter=['*.wav', '*.flac', '*.mp3', '*.ogg', '*.m4a', '*.WAV', '*.MP3'])
+    for path, dirs, flist in walker:
+        for f in flist:
+            yield fs.path.combine(path, f.name)
+
+def parseFolders(filesystem, apath, rpath):
+
+    # List the audio files / if pyfilesystem or not
+    if not filesystem:
+        audio_files = [f for f in glob.glob(input_path + "/**/*", recursive=True) if os.path.isfile(f)]
+        audio_files = [f for f in files if f.endswith( (".WAV", ".wav", ".mp3") )]
+    else:
+        audio_files = []
+        for index, audiofile in enumerate(walk_audio(filesystem, apath)):
+            audio_files.append(audiofile)
+
+    # Create a list of audiofiles without the file extension
+    audio_no_extension = []
+    for audio_file in audio_files:
+        audio_file_no_extension = remove_extension(audio_file)
+        audio_no_extension.append(audio_file_no_extension)
+
+    # List all the result files
+    result_files = [f for f in glob.glob(rpath + "/**/*", recursive = True) if os.path.isfile(f)]
+
+    # Compare with the audio files, if in it then add to the dictionary
+    flist = []
+    for result in result_files:
+        result_no_extension = remove_extension(result)
+        is_in = result_no_extension in audio_no_extension
+
+        if is_in:
+            audio_idx = audio_no_extension.index(result_no_extension)
+            pair = {'audio': audio_files[audio_idx], 'result': result}
+            flist.append(pair)
+        else:
+            continue
+
+    print('Found {} audio files with valid result file.'.format(len(flist)))
+    return flist
 
 def parseFiles(flist, max_segments=10, threshold=0.6):
 
@@ -80,7 +132,7 @@ def findSegments(afile, rfile, confidence_thr):
 
     return segments
 
-def extractSegments(item, sample_rate, out_path, seg_length=3):
+def extractSegments(item, sample_rate, out_path, filesystem, seg_length=3):
 
     # Paths and config
     afile = item[0]
@@ -91,7 +143,10 @@ def extractSegments(item, sample_rate, out_path, seg_length=3):
     print('Extracting segments from {}'.format(afile))
 
     # Open audio file
-    sig, rate = audio_processing.openAudioFile(afile, sample_rate)
+    if not filesystem:
+        sig, rate = openAudioFile(afile, sample_rate)
+    else:
+        sig, rate = openCachedFile(filesystem, afile, sample_rate)
 
     # Extract segments
     seg_cnt = 1
@@ -140,7 +195,7 @@ if __name__ == '__main__':
 
     parser.add_argument("--config",
                         help='Path to the config file',
-                        default="/app/prediction_scripts/config.yaml",
+                        default="config_inference.yaml",
                         required=False,
                         type=str,
                         )
@@ -151,11 +206,11 @@ if __name__ == '__main__':
     with open(cli_args.config) as f:
         cfg = yaml.load(f, Loader=FullLoader)
 
-    # Parse audio and result folders
-    parsed_folders = parseFolders(cfg["INPUT_PATH"], cfg["OUTPUT_PATH"])
+    # Do the connection to server
+    myfs = doConnection(cfg["CONNECTION_STRING"])
 
-    # Set confidence threshold
-    MIN_CONFIDENCE = float(cfg["MIN_CONFIDENCE"])
+    # Parse audio and result folders
+    parsed_folders = parseFolders(myfs, cfg["INPUT_PATH"], cfg["OUTPUT_PATH"])
 
     # Parse file list and make list of segments
     parsed_files = parseFiles(parsed_folders, cfg["NUM_SEGMENTS"], cfg["THRESHOLD"])
@@ -167,6 +222,4 @@ if __name__ == '__main__':
     
     # Extract segments   
     for entry in flist:
-        extractSegments(entry, cfg["SAMPLE_RATE"], cfg["OUT_PATH_SEGMENTS"])
-
-# docker run --rm -it -v $pwd:/app/ -v ~/Data/:/Data registry.gitlab.com/nina-data/audioclip:latest poetry run python prediction_scripts/segments.py
+        extractSegments(entry, cfg["SAMPLE_RATE"], cfg["OUT_PATH_SEGMENTS"], myfs)
