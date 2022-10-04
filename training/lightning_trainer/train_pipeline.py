@@ -152,8 +152,9 @@ def run(config, list_train, list_val, callbacks):
     mlflow.pytorch.autolog(log_models = True)
     trainer.fit(training_loop, trainLoader, valLoader) 
 
+
 @ray.remote(num_gpus=0.5)
-def grid_search(config, list_train, list_val):
+def grid_search(config, list_train, list_val, cbacks):
 
     IP_HEAD_NODE = os.environ.get("IP_HEAD")
     print("HEAD NODE IP: {}".format(IP_HEAD_NODE))
@@ -195,7 +196,7 @@ def grid_search(config, list_train, list_val):
 
     resources_per_trial = {"cpu": config["N_CPU_PER_TRIAL"], "gpu": config["N_GPU_PER_TRIAL"]}
 
-    trainable = tune.with_parameters(run, data_train=list_train, data_val=list_val)
+    trainable = tune.with_parameters(run, list_train=list_train, list_val=list_val, callbacks=cbacks)
 
     print("Running the trials")
     analysis = tune.run(trainable,
@@ -267,6 +268,6 @@ if __name__ == "__main__":
         assert ray.get(results) == 1
     else:
         print("Begin the training script")
-        run(config)
+        run(config, train_list, val_list, cbacks)
 
 # docker run --rm -it -v ~/Code/AudioCLIP:/app -v ~/Data/:/Data --gpus all audioclip:latest poetry run python lightning_trainer/train_pipeline.py
