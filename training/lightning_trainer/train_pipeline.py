@@ -68,14 +68,7 @@ def parseInputFiles(filesystem, input_path):
 
     return files
 
-@mlflow_mixin
-def run(config):
-    #############################
-    # Create the data iterators #
-    #############################
-
-    # Do the connection to server
-    myfs = doConnection(config["CONNECTION_STRING"])
+def getTrainValFilesLists(config, myfs):
 
     train_val_files = parseInputFiles(myfs, config["PATH_TRAIN_VAL_DATASET"])  
 
@@ -92,10 +85,11 @@ def run(config):
     list_val = audio_list.get_processed_list(val_samples)
     list_val = list(itertools.chain.from_iterable(list_val))
 
-    ###########################
-    # Create the labelEncoder #
-    ###########################
-    label_encoder = EncodeLabels(path_to_folders=config["PATH_TRAIN_VAL_DATASET"])
+    return list_train, list_val
+
+def getLabelEncoder(config, myfs):
+
+    label_encoder = EncodeLabels(path_to_folders=config["PATH_TRAIN_VAL_DATASET"], filesystem=myfs)
 
     # Save name of the folder and associated label in a json file
     l = label_encoder.__getLabels__()
@@ -106,13 +100,12 @@ def run(config):
         item = {"Folder": i, "Label": int(j)}
         folder_labels.append(item)
 
-    if not os.path.isfile('/app/assets/label_correspondance.json'):
-        with open('/app/assets/label_correspondance.json', 'w') as outfile:
+    if not os.path.isfile(config["LABEL_FILE"]):
+        with open(config["LABEL_FILE"], 'w') as outfile:
             json.dump(folder_labels, outfile)
 
-    ########################
-    # Define the callbacks #
-    ########################
+def callbacks(config):
+
     early_stopping = EarlyStopping(monitor="val_loss", patience=config["STOPPING_RULE_PATIENCE"])
 
     tune_callback = TuneReportCallback(
@@ -127,9 +120,12 @@ def run(config):
         monitor="val_loss",
         filename="ckpt-{epoch:02d}-{val_loss:.2f}")
 
-    #########################################################################
-    # Instantiate the trainLoader and valLoader and train the model with pl #
-    #########################################################################
+    return [early_stopping, tune_callback, checkpoints_callback]
+
+
+@mlflow_mixin
+def run(config, list_train, list_val, callbacks):
+
     transform = transform_specifications(config)
 
     trainLoader, valLoader = AudioDataModule(list_train, list_val, label_encoder, 
@@ -144,7 +140,7 @@ def run(config):
     # Customize the training (add GPUs, callbacks ...)
     trainer = pl.Trainer(default_root_dir=config["PATH_LIGHTNING_METRICS"], 
                         max_epochs=config["N_EPOCHS"],
-                        callbacks=[tune_callback, early_stopping, checkpoints_callback],
+                        callbacks=callbacks,
                         accelerator=config["ACCELERATOR"]) 
     #trainer.save_checkpoint("example.ckpt")
 
@@ -157,7 +153,7 @@ def run(config):
     trainer.fit(training_loop, trainLoader, valLoader) 
 
 @ray.remote(num_gpus=0.5)
-def grid_search(config):
+def grid_search(config, list_train, list_val):
 
     IP_HEAD_NODE = os.environ.get("IP_HEAD")
     print("HEAD NODE IP: {}".format(IP_HEAD_NODE))
@@ -168,7 +164,7 @@ def grid_search(config):
     if IP_HEAD_NODE == None:
         options = {
             "object_store_memory": 10**9,
-            "_temp_dir": "/app/",
+            "_temp_dir": "/rds/general/user/ss7412/home/AudioCLIP/",
             "address":"auto",
             "ignore_reinit_error":True
         }
@@ -176,7 +172,7 @@ def grid_search(config):
     else: 
         options = {
             "object_store_memory": 10**9,
-            "_temp_dir": "/rds/general/user/ss7412/home/AudioCLIP/",
+            "_temp_dir":  "/rds/general/user/ss7412/home/AudioCLIP/",
             "_node_ip_address": IP_HEAD_NODE, 
             "address": os.environ.get("IP_HEAD_NODE"),
             "ignore_reinit_error":True
@@ -199,7 +195,7 @@ def grid_search(config):
 
     resources_per_trial = {"cpu": config["N_CPU_PER_TRIAL"], "gpu": config["N_GPU_PER_TRIAL"]}
 
-    trainable = tune.with_parameters(run)
+    trainable = tune.with_parameters(run, data_train=list_train, data_val=list_val)
 
     print("Running the trials")
     analysis = tune.run(trainable,
@@ -227,7 +223,7 @@ if __name__ == "__main__":
     parser.add_argument("--config",
                         help="Path to the config file",
                         required=False,
-                        default="/app/config_training.yaml",
+                        default="./config_training.yaml",
                         type=str
     )
     
@@ -243,20 +239,31 @@ if __name__ == "__main__":
     with open(cli_args.config) as f:
         config = yaml.load(f, Loader=FullLoader)
 
-
     mlflow.create_experiment(config["mlflow"]["experiment_name"])
     config["mlflow"]["tracking_uri"] = eval(config["mlflow"]["tracking_uri"])
 
     # Set the MLflow experiment, or create it if it does not exist.
     mlflow.set_experiment(config["mlflow"]["experiment_name"])
 
+    # Do the connection
+    myfs = doConnection(config["CONNECTION_STRING"])
 
+    # Get the label encoder
+    label_encoder = getLabelEncoder(config, myfs)
+
+    # Get the train & val file list
+    train_list, val_list = getTrainValFilesLists(config, myfs)
+
+    # Get the list of callbacks
+    cbacks = callbacks(config)
+
+    # Run the script, with Ray.tune or not
     if cli_args.grid_search == "True":
         #for key in ('learning_rate'): # , 'batch_size'
             #config[key] = eval(config[key])
         print("Begin the parameter search")
         config["LEARNING_RATE"] = eval(config["LEARNING_RATE"])
-        results = grid_search.remote(config)
+        results = grid_search.remote(config, train_list, val_list, cbacks)
         assert ray.get(results) == 1
     else:
         print("Begin the training script")

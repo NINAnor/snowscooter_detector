@@ -13,15 +13,25 @@ class EncodeLabels():
     Function that encodes names of folders as numerical labels
     Wrapper around sklearn's LabelEncoder
     """
-    def __init__(self, path_to_folders):
+    def __init__(self, path_to_folders, filesystem=False):
+        self.filesystem = filesystem
         self.path_to_folders = path_to_folders
         self.class_encode = LabelEncoder()
         self._labels_name()
 
     def _labels_name(self):
-        labels = glob.glob(self.path_to_folders + "/*")
-        labels = [l.split("/")[-1] for l in labels]
-        self.class_encode.fit(labels)
+        if self.filesystem:
+            walker = self.filesystem.walk(self.path_to_folders)
+            labels = []
+            for path, dirs, files in walker:
+                l = dirs
+                for item in l:
+                    labels.append(item.name)
+            self.class_encode.fit(labels)
+        else:
+            labels = glob.glob(self.path_to_folders + "/*")
+            labels = [l.split("/")[-1] for l in labels]
+            self.class_encode.fit(labels)
         
     def __getLabels__(self):
         return self.class_encode.classes_
@@ -33,7 +43,7 @@ class EncodeLabels():
     def one_hot_sample(self, label):
         t_label = self.to_one_hot(self.class_encode, [label])
         return t_label
-
+        
 class AudioLoader(Dataset):
     def __init__(self, list_data, label_encoder, sr=44100, transform=None):
         self.data = list_data
