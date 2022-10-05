@@ -31,6 +31,7 @@ from ray.tune.integration.mlflow import mlflow_mixin
 from ray.tune.suggest.bayesopt import BayesOptSearch
 
 from yaml.loader import FullLoader
+from sklearn.preprocessing import LabelEncoder
 
 from training.lightning_trainer.datamodule import EncodeLabels
 from training.lightning_trainer.datamodule import AudioDataModule
@@ -38,6 +39,38 @@ from training.lightning_trainer.trainingmodule import TransferTrainingModule
 
 from utils.utils_training import transform_specifications
 from utils.utils_training import AudioList
+
+class EncodeFileLabel():
+    """
+    Function that encodes names of folders as numerical labels
+    Wrapper around sklearn's LabelEncoder
+    """
+    def __init__(self, label_file_path):
+        self.label_file_path = label_file_path
+        self.class_encode = LabelEncoder()
+        self._labels_name()
+
+    def _labels_name(self):
+
+        with open(self.label_file_path) as f:
+            label_file= json.load(f)
+
+        dirs = []
+        for item in label_file:
+            dirs.append(item['Folder'])
+        self.class_encode.fit(dirs)
+        
+    def __getLabels__(self):
+        return self.class_encode.classes_
+
+    def to_one_hot(self, codec, values):
+        value_idxs = codec.transform(values)
+        return torch.eye(len(codec.classes_))[value_idxs]
+
+    def one_hot_sample(self, label):
+        t_label = self.to_one_hot(self.class_encode, [label])
+        return t_label
+        
 
 def doConnection(connection_string):
 
@@ -125,9 +158,10 @@ def callbacks(config):
     return [early_stopping, tune_callback, checkpoints_callback]
 
 @mlflow_mixin
-def run(config, list_train, list_val, callbacks, myfs):
+def run(config, list_train, list_val, callbacks):
 
-    label_encoder = EncodeLabels(path_to_folders=config["PATH_TRAIN_VAL_DATASET"], filesystem=myfs)
+    # Label encoder
+    label_encoder = EncodeFileLabel(config["LABEL_FILE"])
 
     transform = transform_specifications(config)
 
@@ -157,7 +191,7 @@ def run(config, list_train, list_val, callbacks, myfs):
 
 
 @ray.remote(num_gpus=0.5)
-def grid_search(config, list_train, list_val, cbacks, myfs):
+def grid_search(config, list_train, list_val, cbacks):
 
     IP_HEAD_NODE = os.environ.get("IP_HEAD")
     print("HEAD NODE IP: {}".format(IP_HEAD_NODE))
@@ -199,7 +233,7 @@ def grid_search(config, list_train, list_val, cbacks, myfs):
 
     resources_per_trial = {"cpu": config["N_CPU_PER_TRIAL"], "gpu": config["N_GPU_PER_TRIAL"]}
 
-    trainable = tune.with_parameters(run, list_train=list_train, list_val=list_val, callbacks=cbacks, myfs=myfs)
+    trainable = tune.with_parameters(run, list_train=list_train, list_val=list_val, callbacks=cbacks)
 
     print("Running the trials")
     analysis = tune.run(trainable,
@@ -267,10 +301,10 @@ if __name__ == "__main__":
             #config[key] = eval(config[key])
         print("Begin the parameter search")
         config["LEARNING_RATE"] = eval(config["LEARNING_RATE"])
-        results = grid_search.remote(config, train_list, val_list, cbacks, myfs)
+        results = grid_search.remote(config, train_list, val_list, cbacks)
         assert ray.get(results) == 1
     else:
         print("Begin the training script")
-        run(config, train_list, val_list, cbacks, myfs)
+        run(config, train_list, val_list, cbacks)
 
 # docker run --rm -it -v ~/Code/AudioCLIP:/app -v ~/Data/:/Data --gpus all audioclip:latest poetry run python lightning_trainer/train_pipeline.py
