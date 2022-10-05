@@ -104,6 +104,8 @@ def getLabelEncoder(config, myfs):
         with open(config["LABEL_FILE"], 'w') as outfile:
             json.dump(folder_labels, outfile)
 
+    return label_encoder
+
 def callbacks(config):
 
     early_stopping = EarlyStopping(monitor="val_loss", patience=config["STOPPING_RULE_PATIENCE"])
@@ -122,9 +124,10 @@ def callbacks(config):
 
     return [early_stopping, tune_callback, checkpoints_callback]
 
-
 @mlflow_mixin
-def run(config, list_train, list_val, callbacks):
+def run(config, list_train, list_val, callbacks, myfs):
+
+    label_encoder = EncodeLabels(path_to_folders=config["PATH_TRAIN_VAL_DATASET"], filesystem=myfs)
 
     transform = transform_specifications(config)
 
@@ -154,7 +157,7 @@ def run(config, list_train, list_val, callbacks):
 
 
 @ray.remote(num_gpus=0.5)
-def grid_search(config, list_train, list_val, cbacks):
+def grid_search(config, list_train, list_val, cbacks, myfs):
 
     IP_HEAD_NODE = os.environ.get("IP_HEAD")
     print("HEAD NODE IP: {}".format(IP_HEAD_NODE))
@@ -188,7 +191,7 @@ def grid_search(config, list_train, list_val, cbacks):
         reduction_factor=2)
 
     # Bayesian optimisation to sample hyperparameters in a smarter way
-    #algo = BayesOptSearch(random_search_steps=4, mode="min")
+    algo = BayesOptSearch(random_search_steps=4, mode="min")
 
     reporter = CLIReporter(
         parameter_columns=["LEARNING_RATE", "BATCH_SIZE"],
@@ -196,7 +199,7 @@ def grid_search(config, list_train, list_val, cbacks):
 
     resources_per_trial = {"cpu": config["N_CPU_PER_TRIAL"], "gpu": config["N_GPU_PER_TRIAL"]}
 
-    trainable = tune.with_parameters(run, list_train=list_train, list_val=list_val, callbacks=cbacks)
+    trainable = tune.with_parameters(run, list_train=list_train, list_val=list_val, callbacks=cbacks, myfs=myfs)
 
     print("Running the trials")
     analysis = tune.run(trainable,
@@ -208,8 +211,8 @@ def grid_search(config, list_train, list_val, cbacks):
         scheduler=scheduler,
         progress_reporter=reporter,
         name=config["NAME_EXPERIMENT"],
-        local_dir=config["LOCAL_DIR"])
-        #search_alg=algo)
+        local_dir=config["LOCAL_DIR"],
+        search_alg=algo)
 
     print("Best hyperparameters found were: ", analysis.best_config)
 
@@ -249,8 +252,8 @@ if __name__ == "__main__":
     # Do the connection
     myfs = doConnection(config["CONNECTION_STRING"])
 
-    # Get the label encoder
-    label_encoder = getLabelEncoder(config, myfs)
+    # Write the labels
+    getLabelEncoder(config, myfs)
 
     # Get the train & val file list
     train_list, val_list = getTrainValFilesLists(config, myfs)
@@ -264,10 +267,10 @@ if __name__ == "__main__":
             #config[key] = eval(config[key])
         print("Begin the parameter search")
         config["LEARNING_RATE"] = eval(config["LEARNING_RATE"])
-        results = grid_search.remote(config, train_list, val_list, cbacks)
+        results = grid_search.remote(config, train_list, val_list, cbacks, myfs)
         assert ray.get(results) == 1
     else:
         print("Begin the training script")
-        run(config, train_list, val_list, cbacks)
+        run(config, train_list, val_list, cbacks, myfs)
 
 # docker run --rm -it -v ~/Code/AudioCLIP:/app -v ~/Data/:/Data --gpus all audioclip:latest poetry run python lightning_trainer/train_pipeline.py
