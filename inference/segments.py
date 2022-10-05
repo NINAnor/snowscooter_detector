@@ -175,7 +175,7 @@ def extractSegments(item, sample_rate, out_path, filesystem, seg_length=3):
                 # Save segment
                 seg_name = 'start={}_end={}_conf={:.3f}_{}.wav'.format(seg['start'], seg['end'], seg['confidence'], seg['audio'].split(os.sep)[-1].rsplit('.', 1)[0])
                 seg_path = os.path.join(outpath, seg_name)
-                audio_processing.saveSignal(seg_sig, seg_path)
+                saveSignal(seg_sig, seg_path)
                 seg_cnt += 1
 
         except:

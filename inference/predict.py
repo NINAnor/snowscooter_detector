@@ -26,40 +26,33 @@ def doConnection(connection_string):
 
 def walk_audio(filesystem, input_path):
     # Get all files in directory with os.walk
-    walker = filesystem.walk(input_path, filter=['*.wav', '*.flac', '*.mp3', '*.ogg', '*.m4a', '*.WAV', '*.MP3'])
-    for path, dirs, flist in walker:
-        for f in flist:
-            yield fs.path.combine(path, f.name)
+    if filesystem:
+        walker = filesystem.walk(input_path, filter=['*.wav', '*.flac', '*.mp3', '*.ogg', '*.m4a', '*.WAV', '*.MP3'])
+        for path, dirs, flist in walker:
+            for f in flist:
+                yield fs.path.combine(path, f.name)
+    else:
+        for path, dirs, flist in os.walk(input_path):
+            for f in flist:
+                yield os.path.join(path, f)
 
 def parseInputFiles(filesystem, input_path, workers, worker_idx, array_job=False):
 
     files = []
+    include = ('.wav', '.flac', '.mp3', '.ogg', '.m4a', '.WAV', '.MP3')
 
     print("Worker {}".format(workers))
     print("Worker_idx {}".format(worker_idx))
 
-    if filesystem:
-
-        if array_job:
-            for index, audiofile in enumerate(walk_audio(filesystem, input_path)):
-                if index%workers == worker_idx:
-                    files.append(audiofile)
-        else:
-            for index, audiofile in enumerate(walk_audio(filesystem, input_path)):
+    if array_job:
+        for index, audiofile in enumerate(walk_audio(filesystem, input_path)):
+            if index%workers == worker_idx:
                 files.append(audiofile)
-
     else:
+        for index, audiofile in enumerate(walk_audio(filesystem, input_path)):
+            files.append(audiofile)
 
-        files = [f for f in glob.glob(input_path + "/**/*", recursive=True) if os.path.isfile(f)]
-        files = [f for f in files if f.endswith( (".WAV", ".wav", ".mp3") )]
-
-        if array_job:
-            for index, audiofile in enumerate(files):
-                if index%workers == worker_idx:
-                    files.append(audiofile)
-
-        else:
-            files = files
+    files = [file for file in files if file.endswith(include)]
             
     print('Found {} files to analyze'.format(len(files)))
 
@@ -69,7 +62,6 @@ def initModel(model_path, device):
     m = torch.load(model_path).eval()
     m = m.to(device)
     print("Model on {}".format(device))
-    #m_q = quantize_dynamic(m, qconfig_spec={torch.nn.Linear, torch.nn.Conv2d}, dtype=torch.qint8)
     return m
 
 def predict(testLoader, model, device):
@@ -85,7 +77,7 @@ def predict(testLoader, model, device):
 
     return proba_list
 
-def get_outname(input, output):
+def get_outname(input, outfolder):
 
     # Get a name for the output // if there are multiple "." in the list
     # only remove the extension
@@ -95,7 +87,18 @@ def get_outname(input, output):
     else:
         filename = input.split("/")[-1].split(".")[0]
 
-    outname = os.sep.join([output, filename + '.csv'])
+    # Make folder if it doesn't exist
+    input_path = os.path.dirname(input)
+    diff = os.path.relpath(input_path, outfolder).split("/")[2:]
+    diff = "/".join(diff)
+
+    outpath = os.sep.join([outfolder, diff])
+    print(outpath)
+
+    if len(outpath) > 0 and not os.path.exists(outpath):
+        os.makedirs(outpath)
+
+    outname = os.sep.join([outpath, filename + '.csv'])
 
     return outname
 
@@ -208,7 +211,7 @@ if __name__ == "__main__":
     # Analyze files
     for entry in flist:
         print("Analysing {}".format(entry))
-        #try:
-        analyzeFile(myfs, entry, model, cfg["OUTPUT_PATH"],  device=cfg["DEVICE"], batch_size=1, num_workers=1)
-        #except:
-        #    print("File {} failed to be analyzed".format(entry))
+        try:
+            analyzeFile(myfs, entry, model, cfg["OUTPUT_PATH"],  device=cfg["DEVICE"], batch_size=1, num_workers=1)
+        except:
+            print("File {} failed to be analyzed".format(entry))
