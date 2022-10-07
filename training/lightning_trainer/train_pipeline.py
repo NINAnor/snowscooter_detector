@@ -190,7 +190,7 @@ def run(config, list_train, list_val, callbacks):
     trainer.fit(training_loop, trainLoader, valLoader) 
 
 
-@ray.remote(num_gpus=0.5)
+@ray.remote(num_gpus=1)
 def grid_search(config, list_train, list_val, cbacks):
 
     IP_HEAD_NODE = os.environ.get("IP_HEAD")
@@ -225,7 +225,7 @@ def grid_search(config, list_train, list_val, cbacks):
         reduction_factor=2)
 
     # Bayesian optimisation to sample hyperparameters in a smarter way
-    algo = BayesOptSearch(random_search_steps=4, mode="min")
+    #algo = BayesOptSearch(random_search_steps=config["RANDOM_SEARCH_STEPS"], mode="min")
 
     reporter = CLIReporter(
         parameter_columns=["LEARNING_RATE", "BATCH_SIZE"],
@@ -245,8 +245,8 @@ def grid_search(config, list_train, list_val, cbacks):
         scheduler=scheduler,
         progress_reporter=reporter,
         name=config["NAME_EXPERIMENT"],
-        local_dir=config["LOCAL_DIR"],
-        search_alg=algo)
+        local_dir=config["LOCAL_DIR"])
+        #search_alg=algo)
 
     print("Best hyperparameters found were: ", analysis.best_config)
 
@@ -297,10 +297,9 @@ if __name__ == "__main__":
 
     # Run the script, with Ray.tune or not
     if cli_args.grid_search == "True":
-        #for key in ('learning_rate'): # , 'batch_size'
-            #config[key] = eval(config[key])
         print("Begin the parameter search")
-        config["LEARNING_RATE"] = eval(config["LEARNING_RATE"])
+        for key in ('LEARNING_RATE', 'P_FREQ_MASK', 'P_TIME_MASK', 'P_AIR_ABSORPTION', 'P_SHIFT', 'P_SEVENBANDPARAMETRICEQ', 'GAUSSIAN_P', "BATCH_SIZE", 'P_SHORT_NOISE', 'P_BG_NOISE'):
+            config[key] = eval(config[key])
         results = grid_search.remote(config, train_list, val_list, cbacks)
         assert ray.get(results) == 1
     else:
