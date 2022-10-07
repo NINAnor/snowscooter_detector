@@ -8,12 +8,15 @@
 
 # Experiment number for MLflow / Note that it is not possible
 # to have the same experiment name multiple times
-current_experiment: &current_exp experiment_0
+current_experiment: &current_exp grid_search
 
 # For monitoring metrics
 mlflow:
   experiment_name: *current_exp
   tracking_uri: mlflow.get_tracking_uri()
+
+# Path for storing Pytorch lightning logs
+PATH_LIGHTNING_METRICS: "./training/lightning_training/lightning_logs"
 
 ########################
 # Audio files settings #
@@ -28,19 +31,19 @@ SAMPLE_RATE: 44100
 # Connection string if connecting to a remote server
 # String in the form "ssh://user:password@host", can also be set to False
 # if data is stored locally
-CONNECTION_STRING: "ssh://user:password@host" # or set to False
+CONNECTION_STRING: False # OR "ssh://user:password@host" 
 
 # Path to the audio dataset used for training and validation
-PATH_TRAIN_VAL_DATASET:  /data/tiny_training #"/cluster/projects/nn8055k/Model_training_data" 
-
-# Path for storing Pytorch lightning logs
-PATH_LIGHTNING_METRICS: "/app/"
+PATH_TRAIN_VAL_DATASET: /PATH/TO/TRAINING/DATA 
 
 # Path to the audio component of the test dataset 
-TEST_PATH: '/data/test_dataset/audio'
+TEST_PATH: '/Data/test_dataset/audio'
 
 # Path to the labels of the test dataset
-TEST_DF_PATH: '/data/test_dataset/labels'
+TEST_DF_PATH: '/Data/test_dataset/labels'
+
+# Label file
+LABEL_FILE: '/app/assets/label_correspondance.json' # If not in a docker container, please specify the full path
 
 ###########################
 # Adding background noise #
@@ -48,21 +51,25 @@ TEST_DF_PATH: '/data/test_dataset/labels'
 
 # True or False
 # True if you want to add other soundscape data to the audio file
-IS_BG_NOISE: False
+IS_BG_NOISE: True
 
 # True or False
 # True if you want to add short noises to the audio file
-IS_SHORT_NOISES: False
+IS_SHORT_NOISE: True
 
 # If IS_BG_NOISE is True add the path to the folder containing
 # the background noises
 # !! PyfileSystem does not apply here so bg noise should be stored where the model is trained !!
-PATH_BG_NOISE: "/data/Noise_background/soundscape"
+PATH_BG_NOISE: "/Data/Noise_background/soundscapes"
 
 # If IS_BG_NOISE is True add the path to the folder containing
 # the background noises
 # !! PyfileSystem does not apply here so bg noise should be stored where the model is trained !!
-PATH_SHORT_NOISES: "/data/Noise_background/short_noises"
+PATH_SHORT_NOISE: "/Data/Noise_background/short_noises"
+
+# Probability of adding short noises and background noises
+P_SHORT_NOISE: "tune.uniform(0,1)"
+P_BG_NOISE: "tune.uniform(0,1)"
 
 #####################
 # TRAINING SETTINGS #
@@ -72,10 +79,10 @@ PATH_SHORT_NOISES: "/data/Noise_background/short_noises"
 PROP_TRAINING: 0.8 
 
 # batch size used // DECREASE IF SHARED MEMORY PROBLEM
-BATCH_SIZE: 32
+BATCH_SIZE: "tune.choice([16,32,64])"
 
 # number of epochs to run, due to stopping rule this number just needs to be big
-N_EPOCHS: 500
+N_EPOCHS: 50
 
 # number of epochs since last improvement before stopping training
 STOPPING_RULE_PATIENCE: 10
@@ -90,7 +97,7 @@ ACCELERATOR: "gpu"
 PIN_MEMORY: True
 
 # Learning rate to use. NOTE that if using ray.tune you can change to tune.loguniform
-LEARNING_RATE: "tune.loguniform(0.0001, 0.1)"
+LEARNING_RATE: "tune.loguniform(0.00001, 0.1)"
 
 # Number of output neurons for the model
 NUM_TARGET_CLASSES: 2
@@ -100,7 +107,7 @@ NUM_TARGET_CLASSES: 2
 #####################
 
 # Name of the ray experiment
-NAME_EXPERIMENT: "ray_experiment_0"
+NAME_EXPERIMENT: "ray_logs"
 
 # Number of CPU available for each trial
 N_CPU_PER_TRIAL: 4
@@ -109,13 +116,17 @@ N_CPU_PER_TRIAL: 4
 # RAY TUNE USES ONE GPU FOR THE HEAD NODE, HAVE A LEAST 2 GPUS!!!
 N_GPU_PER_TRIAL: 1
 
-# Number of trials to do
-N_SAMPLING: 20
+# Number of trials to do (ONLY IF RANDOM ALGORITHM)
+N_SAMPLING: 50
+
+# If Bayesian search:
+RANDOM_SEARCH_STEPS: 20
+
 
 # Ray tune saves some temp files in some folders that require root access
 # It is possible to change the directory to avoid permission problems:
 # For storing the ray tune results
-LOCAL_DIR: "/app/" 
+LOCAL_DIR: "." 
 
 #######################
 # TRANSFORMS SETTINGS #
@@ -127,22 +138,23 @@ LOCAL_DIR: "/app/"
 # Parameters for the addition of Gaussian noise
 GAUSSIAN_MIN_AMPLITUDE: 0.001
 GAUSSIAN_MAX_AMPLITUDE: 0.015
-GAUSSIAN_P: 0.5
+GAUSSIAN_P: "tune.uniform(0,1)" # 0.5
 
 # Parameters for SevenBandParametricEQ: 
 # modifications to the frequency equalisation (this is similar to slightly 
 # changing the response characteristics of your mic)
-P_SEVENBANDPARAMETRICEQ: 0.5
+P_SEVENBANDPARAMETRICEQ: "tune.uniform(0,1)" # 0.5
 
 # Time shifting
-P_SHIFT: 0.5
+P_SHIFT: "tune.uniform(0,1)" # 0.5
 
 # Parameters for AirAbsorption:
 # emulating the effects of distance by adding a bit of low-pass filtering, 
 # and/or some echo/reverb using an impulse response.
-P_AIR_ABSORPTION: 0.5
+P_AIR_ABSORPTION: "tune.uniform(0,1)" # 0.5
 
 # Time masking and frequency masking -- these don't have a very obvious interpretation but 
 # are a kind of "dropout" of frequencies or time regions, and seem to help.
-P_TIME_MASK: 0.5
-P_FREQ_MASK: 0.5
+P_TIME_MASK: "tune.uniform(0,1)" # 0.5
+P_FREQ_MASK: "tune.uniform(0,1)" # 0.5
+
