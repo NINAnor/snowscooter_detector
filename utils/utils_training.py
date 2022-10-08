@@ -6,7 +6,7 @@ from audiomentations import Compose, SevenBandParametricEQ, TimeMask, FrequencyM
 
 def transform_specifications(cfg):
 
-    if cfg["IS_SHORT_NOISES"] and cfg["IS_BG_NOISE"]:
+    if cfg["IS_SHORT_NOISE"] and cfg["IS_BG_NOISE"]:
 
         audio_transforms = Compose([
             AddBackgroundNoise(sounds_path=cfg["PATH_BG_NOISE"], p=cfg["P_BG_NOISE"]),
@@ -31,7 +31,7 @@ def transform_specifications(cfg):
             ]
         )
 
-    elif cfg["IS_SHORT_NOISES"]:
+    elif cfg["IS_SHORT_NOISE"]:
 
         audio_transforms = Compose([
             AddShortNoises(sounds_path=cfg["PATH_SHORT_NOISE"], p=cfg["P_SHORT_NOISE"]),
