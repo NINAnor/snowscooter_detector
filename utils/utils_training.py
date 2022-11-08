@@ -1,5 +1,5 @@
 import torchvision as tv
-import random
+from tqdm import tqdm
 
 from utils.audio_processing import openAudioFile, openCachedFile, splitSignal
 from audiomentations import Compose, SevenBandParametricEQ, TimeMask, FrequencyMask, Shift, AirAbsorption, AddGaussianNoise, AddBackgroundNoise, AddShortNoises
@@ -86,7 +86,7 @@ class AudioList():
 
         list_segments = []
 
-        for item in audio_path:
+        for item in tqdm(audio_path):
             track = self.read_audio(self.filesystem, item)        
             label = item.split("/")[-2]
             list_divided = self.split_segment(track)
