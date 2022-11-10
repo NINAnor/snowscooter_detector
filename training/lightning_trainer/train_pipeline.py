@@ -182,7 +182,13 @@ def run(config, list_train, list_val, callbacks):
     #trainer.save_checkpoint("example.ckpt")
 
     # Parameters for the training loop
-    training_loop = TransferTrainingModule(learning_rate=config["LEARNING_RATE"], num_target_classes=config["NUM_TARGET_CLASSES"])
+    model_arguments = {
+        "hop_length": config["FFT_HOP_LENGTH"],
+        "n_fft": config["FFT_N_FFT"],
+        "win_length": config["FFT_WIN_LENGTH"],
+        "window": config["FFT_WINDOW"],
+    }
+    training_loop = TransferTrainingModule(learning_rate=config["LEARNING_RATE"], num_target_classes=config["NUM_TARGET_CLASSES"], model_arguments=model_arguments)
 
     # Finally train the model
     #with mlflow.start_run(experiment_id=config["current_experiment"]) as run:
