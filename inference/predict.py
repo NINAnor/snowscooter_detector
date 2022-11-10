@@ -58,11 +58,12 @@ def parseInputFiles(filesystem, input_path, workers, worker_idx, array_job=False
 
     return files
 
-def initModel(model_path, device):
-    m = torch.load(model_path).eval()
-    m = m.to(device)
-    print("Model on {}".format(device))
-    return m
+def initModel(model_path):
+    model = CustomAudioCLIP(num_target_classes=2)
+    model = model.load_from_checkpoint(model_path, num_target_classes=2)
+    model.eval()
+    #m_q = quantize_dynamic(m, qconfig_spec={torch.nn.Linear, torch.nn.Conv2d}, dtype=torch.qint8)
+    return model
 
 def predict(testLoader, model, device):
 
