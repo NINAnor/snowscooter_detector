@@ -45,7 +45,7 @@ def transform_specifications(cfg):
 
     else: 
         audio_transforms = Compose([
-            AddGaussianNoise(min_amplitude=cfg['GAUSSIAN_MIN_AMPLITUDE'], max_amplitude=cfg['GAUSSIAN_MIN_AMPLITUDE'], p=cfg['GAUSSIAN_P']),
+            AddGaussianNoise(min_amplitude=cfg['GAUSSIAN_MIN_AMPLITUDE'], max_amplitude=cfg['GAUSSIAN_MAX_AMPLITUDE'], p=cfg['GAUSSIAN_P']),
             SevenBandParametricEQ(p=cfg['P_SEVENBANDPARAMETRICEQ']),
             Shift(cfg['P_SHIFT']),
             AirAbsorption(p=cfg['P_AIR_ABSORPTION'], min_temperature=10, max_temperature=20),
