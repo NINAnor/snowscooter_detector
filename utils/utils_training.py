@@ -1,5 +1,5 @@
 import torchvision as tv
-import random
+from tqdm import tqdm
 
 from utils.audio_processing import openAudioFile, openCachedFile, splitSignal
 from audiomentations import Compose, SevenBandParametricEQ, TimeMask, FrequencyMask, Shift, AirAbsorption, AddGaussianNoise, AddBackgroundNoise, AddShortNoises
@@ -47,10 +47,10 @@ def transform_specifications(cfg):
         audio_transforms = Compose([
             AddGaussianNoise(min_amplitude=cfg['GAUSSIAN_MIN_AMPLITUDE'], max_amplitude=cfg['GAUSSIAN_MAX_AMPLITUDE'], p=cfg['GAUSSIAN_P']),
             SevenBandParametricEQ(p=cfg['P_SEVENBANDPARAMETRICEQ']),
-            Shift(cfg['P_SHIFT']),
+            Shift(p=cfg['P_SHIFT']),
             AirAbsorption(p=cfg['P_AIR_ABSORPTION'], min_temperature=10, max_temperature=20),
-            TimeMask(cfg['P_TIME_MASK']),
-            FrequencyMask(cfg['P_FREQ_MASK'])
+            TimeMask(p=cfg['P_TIME_MASK']),
+            FrequencyMask(p=cfg['P_FREQ_MASK'])
             ]
         )
 
@@ -86,7 +86,7 @@ class AudioList():
 
         list_segments = []
 
-        for item in audio_path:
+        for item in tqdm(audio_path):
             track = self.read_audio(self.filesystem, item)        
             label = item.split("/")[-2]
             list_divided = self.split_segment(track)
