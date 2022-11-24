@@ -30,8 +30,8 @@ def parseFolders(filesystem, apath, rpath):
 
     # List the audio files / if pyfilesystem or not
     if not filesystem:
-        audio_files = [f for f in glob.glob(input_path + "/**/*", recursive=True) if os.path.isfile(f)]
-        audio_files = [f for f in files if f.endswith( (".WAV", ".wav", ".mp3") )]
+        audio_files = [f for f in glob.glob(apath + "/**/*", recursive=True) if os.path.isfile(f)]
+        audio_files = [f for f in audio_files if f.endswith( (".WAV", ".wav", ".mp3") )]
     else:
         audio_files = []
         for index, audiofile in enumerate(walk_audio(filesystem, apath)):
