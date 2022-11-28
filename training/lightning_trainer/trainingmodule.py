@@ -40,8 +40,9 @@ class MilestonesFinetuning(BaseFinetuning):
 
 class TransferTrainingModule(pl.LightningModule):
 
-    def __init__(self, learning_rate, num_target_classes):
+    def __init__(self, learning_rate, num_target_classes, model_arguments=None):
         super().__init__()
+        model_arguments = {} if model_arguments is None else model_arguments
         self.aclp = AudioCLIP(pretrained=f'/app/assets/AudioCLIP-Full-Training.pt')
         self.num_target_classes = num_target_classes
         print("Init model")

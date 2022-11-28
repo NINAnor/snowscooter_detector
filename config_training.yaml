@@ -21,9 +21,13 @@ PATH_LIGHTNING_METRICS: "./training/lightning_training/lightning_logs"
 ########################
 # Audio files settings #
 ########################
-LENGTH_SEGMENTS: 3 # in seconds
-SAMPLE_RATE: 44100
-
+LENGTH_SEGMENTS: [3, 5] # in seconds
+SAMPLE_RATE: [44100, 16000, 8000]
+FFT_HOP_LENGTH: [160, 100, 200, 561] # original was 561
+FFT_N_FFT: 2048  # original was 2048 - cannot change when relying on pretrained!
+FFT_WIN_LENGTH: 1654 # original was 1654 - cannot change when relying on pretrained!         
+FFT_WINDOW: 'blackmanharris' # original was 'blackmanharris'        
+    
 #################
 # PATH SETTINGS #
 #################
