@@ -196,7 +196,7 @@ def run(config, list_train, list_val, callbacks):
     trainer.fit(training_loop, trainLoader, valLoader) 
 
 
-@ray.remote(num_gpus=1)
+@ray.remote(num_gpus=0.5)
 def grid_search(config, list_train, list_val, cbacks):
 
     IP_HEAD_NODE = os.environ.get("IP_HEAD")
@@ -274,8 +274,8 @@ if __name__ == "__main__":
     parser.add_argument("--grid_search",
                         help="If grid search = True, the model will look for the best hyperparameters, else it will train",
                         required=False,
-                        default=False,
-                        type=str
+                        default=True,
+                        type=bool
     )
 
     cli_args = parser.parse_args()
@@ -302,10 +302,13 @@ if __name__ == "__main__":
     cbacks = callbacks(config)
 
     # Run the script, with Ray.tune or not
-    if cli_args.grid_search == "True":
+    if cli_args.grid_search:
         print("Begin the parameter search")
-        for key in ('LEARNING_RATE', 'P_FREQ_MASK', 'P_TIME_MASK', 'P_AIR_ABSORPTION', 'P_SHIFT', 'P_SEVENBANDPARAMETRICEQ', 'GAUSSIAN_P', "BATCH_SIZE", 'P_SHORT_NOISE', 'P_BG_NOISE'):
-            config[key] = eval(config[key])
+        for key in config.keys():
+            try:
+                config[key] = eval(config[key])
+            except:
+                continue
         results = grid_search.remote(config, train_list, val_list, cbacks)
         assert ray.get(results) == 1
     else:
