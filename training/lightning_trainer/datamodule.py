@@ -83,18 +83,19 @@ class AudioLoader(Dataset):
 
 class AudioDataModule(pl.LightningDataModule):
 
-    def __init__(self, train_list, val_list, label_encoder, batch_size, num_workers, pin_memory, sampler=True, transform=None):
+    def __init__(self, train_list, val_list, label_encoder, batch_size, num_workers, pin_memory, sampler=True, transform_t=None, transform_v=None):
         self.batch_size = batch_size
         self.train_list = train_list
         self.val_list = val_list
         self.label_encoder = label_encoder
         self.num_workers = num_workers
         self.pin_memory = pin_memory
-        self.transform = transform
+        self.transform_t = transform_t
+        self.transform_v = transform_v
         self.sampler = sampler
 
     def train_val_loader(self):
-        train_loader = AudioLoader(self.train_list, self.label_encoder, self.transform)
+        train_loader = AudioLoader(self.train_list, self.label_encoder, self.transform_t)
 
         if self.sampler:
             trainLoader =  DataLoader(train_loader, batch_size=self.batch_size, num_workers=self.num_workers, 
@@ -102,7 +103,7 @@ class AudioDataModule(pl.LightningDataModule):
         else:
             trainLoader =  DataLoader(train_loader, batch_size=self.batch_size, num_workers=self.num_workers, pin_memory=self.pin_memory)
 
-        val_loader = AudioLoader(self.val_list, self.label_encoder, self.transform)
+        val_loader = AudioLoader(self.val_list, self.label_encoder, self.transform_v)
         valLoader = DataLoader(val_loader, batch_size=self.batch_size, num_workers=self.num_workers, pin_memory=self.pin_memory)
 
         return (trainLoader, valLoader)

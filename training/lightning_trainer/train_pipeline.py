@@ -37,7 +37,7 @@ from training.lightning_trainer.datamodule import EncodeLabels
 from training.lightning_trainer.datamodule import AudioDataModule
 from training.lightning_trainer.trainingmodule import TransferTrainingModule
 
-from utils.utils_training import transform_specifications
+from utils.utils_training import transform_config_train, transform_config_val 
 from utils.utils_training import AudioList
 
 class EncodeFileLabel():
@@ -163,13 +163,15 @@ def run(config, list_train, list_val, callbacks):
     # Label encoder
     label_encoder = EncodeFileLabel(config["LABEL_FILE"])
 
-    transform = transform_specifications(config)
+    transform_train = transform_config_train(config)
+    transform_val = transform_config_val(config)
 
     trainLoader, valLoader = AudioDataModule(list_train, list_val, label_encoder, 
                                 batch_size=config["BATCH_SIZE"],
                                 num_workers=config["NUM_WORKERS"],
                                 pin_memory=config["PIN_MEMORY"],
-                                transform=transform,
+                                transform_t=transform_train,
+                                transform_v=transform_val,
                                 sampler=True # Should we oversample the training set?
                                 ).train_val_loader()
 
