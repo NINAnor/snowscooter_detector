@@ -231,7 +231,7 @@ def grid_search(config, list_train, list_val, cbacks):
         reduction_factor=2)
 
     # Bayesian optimisation to sample hyperparameters in a smarter way
-    #algo = BayesOptSearch(random_search_steps=config["RANDOM_SEARCH_STEPS"], mode="min")
+    algo = BayesOptSearch(random_search_steps=config["RANDOM_SEARCH_STEPS"], mode="min")
 
     reporter = CLIReporter(
         parameter_columns=["LEARNING_RATE", "BATCH_SIZE"],
@@ -251,8 +251,8 @@ def grid_search(config, list_train, list_val, cbacks):
         scheduler=scheduler,
         progress_reporter=reporter,
         name=config["NAME_EXPERIMENT"],
-        local_dir=config["LOCAL_DIR"])
-        #search_alg=algo)
+        local_dir=config["LOCAL_DIR"],
+        search_alg=algo)
 
     print("Best hyperparameters found were: ", analysis.best_config)
 
@@ -274,8 +274,8 @@ if __name__ == "__main__":
     parser.add_argument("--grid_search",
                         help="If grid search = True, the model will look for the best hyperparameters, else it will train",
                         required=False,
-                        default=True,
-                        type=bool
+                        default=False,
+                        type=str
     )
 
     cli_args = parser.parse_args()
@@ -302,7 +302,7 @@ if __name__ == "__main__":
     cbacks = callbacks(config)
 
     # Run the script, with Ray.tune or not
-    if cli_args.grid_search:
+    if cli_args.grid_search == "True":
         print("Begin the parameter search")
         for key in config.keys():
             try:
