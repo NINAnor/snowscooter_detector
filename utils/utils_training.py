@@ -4,7 +4,7 @@ from tqdm import tqdm
 from utils.audio_processing import openAudioFile, openCachedFile, splitSignal
 from audiomentations import Compose, SevenBandParametricEQ, TimeMask, FrequencyMask, Shift, AirAbsorption, AddGaussianNoise, AddBackgroundNoise, AddShortNoises
 
-def transform_specifications(cfg):
+def transform_config_train(cfg):
 
     if cfg["IS_SHORT_NOISE"] and cfg["IS_BG_NOISE"]:
 
@@ -54,6 +54,12 @@ def transform_specifications(cfg):
             ]
         )
 
+    return audio_transforms
+
+def transform_config_val(cfg):
+    audio_transforms = Compose([
+        AddBackgroundNoise(sounds_path=cfg["PATH_BG_NOISE"], p=cfg["P_BG_NOISE_VAL"])
+    ])
     return audio_transforms
 
 class AudioList():
