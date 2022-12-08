@@ -1,33 +1,23 @@
-import numpy as np
-import torch
-import yaml
+import os
+import sys
+
+sys.path.append(os.path.abspath(os.path.dirname(__file__) + "/../.."))
 import itertools
-import glob
+
+
+import numpy as np
 import pandas as pd
 from tqdm import tqdm
-
-from torch.quantization import quantize_dynamic
-from torch.utils.data import DataLoader, Dataset
+from torch.utils.data import DataLoader
 
 from utils.utils_testing import AudioList, AudioLoader
 from utils.parsing_utils import parseFolders
-
-import matplotlib.pyplot as plt
-from sklearn.metrics import roc_curve, auc, confusion_matrix
-
-import itertools
-
+from utils.audio_signal import AudioSignal
 from model.custom_model import CustomAudioCLIP
 
-identifier_string = "ben_ray_"
-# model_path = "/home/femkegb/Documents/snowscooter_detector/experiment_output/tagged/grid_search_20221110_121145_wide_search_better_checkpointing/archive/20221111_002709/models/ckpt-epoch=47-val_loss=0.06.ckpt"
 
-label_path = "/Data/test_dataset/labels"
-audio_test_path = "/Data/test_dataset/audio"
-# mpath = "/home/femkegb/Documents/snowscooter_detector/experiment_output/tagged/grid_search_20221115_095020_try_again_resume_dl2/archive/20221115_202556/models/ckpt-epoch=59-val_loss=0.07.ckpt" # femke model
-# mpath = "/home/femkegb/Documents/snowscooter_detector/training/lightning_training/lightning_logs/ckpt-epoch=45-val_loss=0.09.ckpt" # ben params
-# mpath = "/home/femkegb/Documents/snowscooter_detector/training/lightning_training/lightning_logs/ckpt-epoch=21-val_loss=0.12-lr=0.005.ckpt" # ben model
-mpath = "/app/assets/ckpt-epoch=10-val_loss=0.09.ckpt"  # ben model ray
+L_SEGMENTS = 3
+OVERLAP = 0
 
 
 def getTestLoader(list_arrays):
@@ -49,20 +39,18 @@ def predict(testLoader, model):
     return np.array(proba_list)
 
 
-def initModel(model_path):
-    model = CustomAudioCLIP(num_target_classes=2)
+def initModel(model_path, model_arguments):
+    model = CustomAudioCLIP(num_target_classes=2, model_arguments=model_arguments)
     model = model.load_from_checkpoint(model_path, num_target_classes=2)
     model.eval()
-
-    # m = torch.load(model_path).eval()
-    # m_q = quantize_dynamic(m, qconfig_spec={torch.nn.Linear, torch.nn.Conv2d}, dtype=torch.qint8)
     return model
 
 
-def get_preds_and_gt(item):
-
+def get_preds_and_gt(model, item, calculate_hr=False):
     gt = []  # ground truths
     preds = []  # predictions
+    hr = []  # harmonic ratios
+    comment = []  # tagging type / comments
 
     audio = item["audio"]
     result = item["result"]
@@ -70,164 +58,98 @@ def get_preds_and_gt(item):
     # Get the prediction scores
     l_audio = AudioList().get_processed_list(audio)
     test_loader = getTestLoader(l_audio[0])
-    p = predict(test_loader, m)
-    preds.append(p)
+    pred = predict(test_loader, model)
+    preds.append(pred)
 
     # Get the ground truth
     df = pd.read_csv(result, sep="\t")
-    df = df[df["View"] == "Spectrogram 1"].reset_index()
 
-    for segment in range(len(l_audio[0])):
-
-        if segment > 0:
-            segment = segment * (l_segments - overlap)
-
-        is_in_df = False
-
-        for row in range(len(df)):
-
-            begin_time = df.loc[row]["Begin Time (s)"]
-            end_time = df.loc[row]["End Time (s)"]
-
-            if begin_time <= segment <= end_time:
-                is_in_df = True
-            else:
-                continue
+    for i in range(len(l_audio[0])):
+        segment = i * (L_SEGMENTS - OVERLAP)
+        df_filtered_on_segment = df[
+            (segment <= df["End Time (s)"]) & (df["Begin Time (s)"] <= segment)
+        ]
+        is_in_df = len(df_filtered_on_segment) > 0
 
         if is_in_df:
             gt.append(1)
+            comment.append(
+                str(df_filtered_on_segment["type"].values[0])
+                + " / "
+                + str(df_filtered_on_segment["comment"].values[0])
+            )
         else:
             gt.append(0)
+            comment.append("None")
+        if calculate_hr:
+            if pred[i] > 0.0:
+                signal = AudioSignal(l_audio[0][i], fs=44100)
+                signal.apply_butterworth_filter(
+                    order=18, Wn=np.asarray([1, 600]) / (signal.fs / 2)
+                )
+                signal_hr = signal.harmonic_ratio(
+                    win_length=int(1 * signal.fs),
+                    hop_length=int(0.1 * signal.fs),
+                    window="hamming",
+                )
+                hr.append(np.mean(signal_hr))
+            else:
+                hr.append(-1)
 
-    return (gt, preds)
-
-
-def get_auc_roc_fig(gt_array, preds_arr, title):
-
-    fpr, tpr, _ = roc_curve(gt_array, preds_arr)
-    roc_auc = auc(fpr, tpr)
-
-    plt.figure()
-    lw = 2
-    plt.plot(
-        fpr,
-        tpr,
-        color="darkorange",
-        lw=lw,
-        label="ROC curve (area = %0.2f)" % roc_auc,
-    )
-    plt.plot([0, 1], [0, 1], color="navy", lw=lw, linestyle="--")
-    plt.xlim([0.0, 1.0])
-    plt.ylim([0.0, 1.05])
-    plt.xlabel("False Positive Rate")
-    plt.ylabel("True Positive Rate")
-    plt.title(title)
-    plt.legend(loc="lower right")
-    plt.show()
-    plt.savefig(identifier_string + "auc_roc.png")
+    return (gt, preds, hr, comment)
 
 
-def binarise(preds_array, threshold):
+def test_model(audio_test_path, label_path, mpath, model_arguments):
+    # obtain audio and labels
+    flist = parseFolders(audio_test_path, label_path)
 
-    predicted_labels = []
+    # initialize the model
+    model = initModel(mpath, model_arguments=model_arguments)
 
-    for proba in preds_array:
-        if proba > threshold:
-            predicted_labels.append(1)
-        else:
-            predicted_labels.append(0)
+    # init list for information tracking
+    gt_all = []  # ground truths
+    preds_all = []  # predictions
+    segment_ids_all = []  # tuples of filename and segment start time
+    hr_all = []  # harmonic ratios
+    comments_all = []  # comments from labels (None if no comment)
 
-    return predicted_labels
+    for item in tqdm(flist):
+        # run model
+        gt, preds, hr, comment = get_preds_and_gt(model, item, calculate_hr=True)
 
+        # collect results
+        gt_all.append(gt)
+        preds_all.append(preds)
+        hr_all.append(hr)
+        comments_all.append(comment)
 
-def get_confusion_matrix(gt, preds, threshold=0.9):
-
-    b_preds = binarise(preds, threshold)
-    print(confusion_matrix(gt, b_preds))
-
-
-l_segments = 3
-overlap = 0
-time_index = 0
-threshold = 0.9
-
-flist = parseFolders(audio_test_path, label_path)
-m = initModel(mpath)
-gt_all = []  # ground truths
-preds_all = []  # predictions
-fp_info_all = []
-fn_info_all = []
-
-for item in tqdm(flist):
-    gt, preds = get_preds_and_gt(item)
-    gt_all.append(gt)
-    preds_all.append(preds)
-    # get audio file and segment number for False Positive
-    detector_positives = preds[0] > 0.9
-    ground_truth_positives = np.asarray(gt, dtype=bool)
-    false_positives = np.logical_and(detector_positives, ~ground_truth_positives)
-    false_positive_segments_start_time = np.where(false_positives)[0] * (
-        l_segments - overlap
-    )
-    false_positive_segments_filename = [item["audio"]] * len(
-        false_positive_segments_start_time
-    )
-    fp_info_all.extend(
-        list(
-            zip(
-                false_positive_segments_filename,
-                false_positive_segments_start_time.tolist(),
-            )
+        # get segment ids for later identification
+        segment_ids = [item["audio"]] * len(hr)
+        segment_ids_start_time = np.linspace(
+            0.0, len(hr) * (L_SEGMENTS - OVERLAP) - (L_SEGMENTS - OVERLAP), len(hr)
         )
-    )
-    # get audio file and segment number for False Negative
-    false_negatives = np.logical_and(~detector_positives, ground_truth_positives)
-    false_negative_segments_start_time = np.where(false_negatives)[0] * (
-        l_segments - overlap
-    )
-    false_negative_segments_filename = [item["audio"]] * len(
-        false_negative_segments_start_time
-    )
-    fn_info_all.extend(
-        list(
-            zip(
-                false_negative_segments_filename,
-                false_negative_segments_start_time.tolist(),
-            )
-        )
-    )
-gt_all_all = list(itertools.chain.from_iterable(gt_all))
-preds_all_all = list(itertools.chain.from_iterable(preds_all))
+        segment_ids_all.extend(list(zip(segment_ids, segment_ids_start_time.tolist())))
 
-print("False negatives:")
-print(fn_info_all)
+    gt_all_all = np.asarray(list(itertools.chain.from_iterable(gt_all)))
+    preds_all_all = np.concatenate(list(itertools.chain.from_iterable(preds_all)))
+    hr_all_all = np.asarray(list(itertools.chain.from_iterable(hr_all)))
+    comments_all_all = np.asarray(list(itertools.chain.from_iterable(comments_all)))
 
-print("False positives:")
-print(fp_info_all)
+    np.save(identifier_string + "gt_all_all.npy", gt_all_all)
+    np.save(identifier_string + "preds_all_all.npy", preds_all_all)
+    np.save(identifier_string + "hr_all_all.npy", hr_all_all)
+    np.save(identifier_string + "comments_all_all.npy", comments_all_all)
+    np.save(identifier_string + "segment_ids_all.npy", np.asarray(segment_ids_all))
 
-get_auc_roc_fig(gt_all_all, np.concatenate(preds_all_all), title=identifier_string)
-get_confusion_matrix(gt_all_all, np.concatenate(preds_all_all), threshold=0.9)
 
-get_confusion_matrix(gt_all[26], preds_all[26][0])
-get_confusion_matrix(gt_all[1], preds_all[1][0])
+if __name__ == "__main__":
+    label_path = "/Data/test_dataset/labels"
+    audio_test_path = "/Data/test_dataset/audio"
+    mpath = "/app/assets/ckpt-epoch=21-val_loss=0.12-lr=0.005.ckpt"
+    identifier_string = "ben_model_"
+    model_arguments = {}
 
-import csv
+    test_model(audio_test_path, label_path, mpath, model_arguments)
 
-with open(identifier_string + "false_negatives.csv", "w") as out:
-    csv_out = csv.writer(out)
-    csv_out.writerow(["name", "t_start"])
-    for row in fn_info_all:
-        csv_out.writerow(row)
 
-with open(identifier_string + "false_positives.csv", "w") as out:
-    csv_out = csv.writer(out)
-    csv_out.writerow(["name", "t_start"])
-    for row in fp_info_all:
-        csv_out.writerow(row)
-
-import pickle
-
-with open(identifier_string + "gt_all_all.pickle", "wb") as handle:
-    pickle.dump(gt_all_all, handle, protocol=pickle.HIGHEST_PROTOCOL)
-with open(identifier_string + "preds_all_all.pickle", "wb") as handle:
-    pickle.dump(preds_all_all, handle, protocol=pickle.HIGHEST_PROTOCOL)
+    

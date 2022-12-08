@@ -8,7 +8,7 @@ def remove_extension(input):
     filename = Path(input)
     filename = filename.with_suffix("")
     filename = os.path.basename(filename)
-    return str(filename)
+    return filename
 
 
 def parseFolders(apath, rpath):
