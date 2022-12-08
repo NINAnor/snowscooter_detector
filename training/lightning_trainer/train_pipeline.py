@@ -37,7 +37,7 @@ from training.lightning_trainer.datamodule import EncodeLabels
 from training.lightning_trainer.datamodule import AudioDataModule
 from training.lightning_trainer.trainingmodule import TransferTrainingModule
 
-from utils.utils_training import transform_specifications
+from utils.utils_training import transform_config_train, transform_config_val 
 from utils.utils_training import AudioList
 
 class EncodeFileLabel():
@@ -163,13 +163,15 @@ def run(config, list_train, list_val, callbacks):
     # Label encoder
     label_encoder = EncodeFileLabel(config["LABEL_FILE"])
 
-    transform = transform_specifications(config)
+    transform_train = transform_config_train(config)
+    transform_val = transform_config_val(config)
 
     trainLoader, valLoader = AudioDataModule(list_train, list_val, label_encoder, 
                                 batch_size=config["BATCH_SIZE"],
                                 num_workers=config["NUM_WORKERS"],
                                 pin_memory=config["PIN_MEMORY"],
-                                transform=transform,
+                                transform_t=transform_train,
+                                transform_v=transform_val,
                                 sampler=True # Should we oversample the training set?
                                 ).train_val_loader()
 
@@ -196,7 +198,7 @@ def run(config, list_train, list_val, callbacks):
     trainer.fit(training_loop, trainLoader, valLoader) 
 
 
-@ray.remote(num_gpus=1)
+@ray.remote(num_gpus=0.5)
 def grid_search(config, list_train, list_val, cbacks):
 
     IP_HEAD_NODE = os.environ.get("IP_HEAD")
@@ -231,7 +233,7 @@ def grid_search(config, list_train, list_val, cbacks):
         reduction_factor=2)
 
     # Bayesian optimisation to sample hyperparameters in a smarter way
-    #algo = BayesOptSearch(random_search_steps=config["RANDOM_SEARCH_STEPS"], mode="min")
+    algo = BayesOptSearch(random_search_steps=config["RANDOM_SEARCH_STEPS"], mode="min")
 
     reporter = CLIReporter(
         parameter_columns=["LEARNING_RATE", "BATCH_SIZE"],
@@ -251,8 +253,8 @@ def grid_search(config, list_train, list_val, cbacks):
         scheduler=scheduler,
         progress_reporter=reporter,
         name=config["NAME_EXPERIMENT"],
-        local_dir=config["LOCAL_DIR"])
-        #search_alg=algo)
+        local_dir=config["LOCAL_DIR"],
+        search_alg=algo)
 
     print("Best hyperparameters found were: ", analysis.best_config)
 
@@ -304,8 +306,11 @@ if __name__ == "__main__":
     # Run the script, with Ray.tune or not
     if cli_args.grid_search == "True":
         print("Begin the parameter search")
-        for key in ('LEARNING_RATE', 'P_FREQ_MASK', 'P_TIME_MASK', 'P_AIR_ABSORPTION', 'P_SHIFT', 'P_SEVENBANDPARAMETRICEQ', 'GAUSSIAN_P', "BATCH_SIZE", 'P_SHORT_NOISE', 'P_BG_NOISE'):
-            config[key] = eval(config[key])
+        for key in config.keys():
+            try:
+                config[key] = eval(config[key])
+            except:
+                continue
         results = grid_search.remote(config, train_list, val_list, cbacks)
         assert ray.get(results) == 1
     else:
