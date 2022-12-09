@@ -177,6 +177,7 @@ __pycache__/
 bash_utils/
 hpc/
 docker-compose.yml
+results/
 
 
 

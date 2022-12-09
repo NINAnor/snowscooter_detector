@@ -1,5 +1,6 @@
 import os
 import sys
+import argparse
 
 sys.path.append(os.path.abspath(os.path.dirname(__file__) + "/../.."))
 import itertools
@@ -9,9 +10,10 @@ import numpy as np
 import pandas as pd
 from tqdm import tqdm
 from torch.utils.data import DataLoader
+import yaml
 
 from utils.utils_testing import AudioList, AudioLoader
-from utils.parsing_utils import parseFolders
+from utils.parsing_utils import parseFolders, remove_extension
 from utils.audio_signal import AudioSignal
 from model.custom_model import CustomAudioCLIP
 
@@ -99,12 +101,12 @@ def get_preds_and_gt(model, item, calculate_hr=False):
     return (gt, preds, hr, comment)
 
 
-def test_model(audio_test_path, label_path, mpath, model_arguments):
+def test_model(audio_path, label_path, results_path, model_path, model_arguments):
     # obtain audio and labels
-    flist = parseFolders(audio_test_path, label_path)
+    flist = parseFolders(audio_path, label_path)
 
     # initialize the model
-    model = initModel(mpath, model_arguments=model_arguments)
+    model = initModel(model_path, model_arguments=model_arguments)
 
     # init list for information tracking
     gt_all = []  # ground truths
@@ -130,26 +132,94 @@ def test_model(audio_test_path, label_path, mpath, model_arguments):
         )
         segment_ids_all.extend(list(zip(segment_ids, segment_ids_start_time.tolist())))
 
+    # collect all results in vectors
     gt_all_all = np.asarray(list(itertools.chain.from_iterable(gt_all)))
     preds_all_all = np.concatenate(list(itertools.chain.from_iterable(preds_all)))
     hr_all_all = np.asarray(list(itertools.chain.from_iterable(hr_all)))
     comments_all_all = np.asarray(list(itertools.chain.from_iterable(comments_all)))
 
-    np.save(identifier_string + "gt_all_all.npy", gt_all_all)
-    np.save(identifier_string + "preds_all_all.npy", preds_all_all)
-    np.save(identifier_string + "hr_all_all.npy", hr_all_all)
-    np.save(identifier_string + "comments_all_all.npy", comments_all_all)
-    np.save(identifier_string + "segment_ids_all.npy", np.asarray(segment_ids_all))
+    # save all results
+    np.save(os.path.join(results_path, "gt_all_all.npy"), gt_all_all)
+    np.save(
+        os.path.join(results_path, "preds_all_all.npy"),
+        preds_all_all,
+    )
+    np.save(os.path.join(results_path, "hr_all_all.npy"), hr_all_all)
+    np.save(
+        os.path.join(results_path, "comments_all_all.npy"),
+        comments_all_all,
+    )
+    np.save(
+        os.path.join(results_path, "segment_ids_all.npy"),
+        np.asarray(segment_ids_all),
+    )
 
 
 if __name__ == "__main__":
-    label_path = "/Data/test_dataset/labels"
-    audio_test_path = "/Data/test_dataset/audio"
-    mpath = "/app/assets/ckpt-epoch=21-val_loss=0.12-lr=0.005.ckpt"
-    identifier_string = "ben_model_"
-    model_arguments = {}
+    parser = argparse.ArgumentParser()
 
-    test_model(audio_test_path, label_path, mpath, model_arguments)
+    parser.add_argument(
+        "--label_path",
+        help="Path to the labels",
+        required=False,
+        default="/Data/test_dataset/labels",
+        type=str,
+    )
 
+    parser.add_argument(
+        "--audio_path",
+        help="Path to the audio",
+        required=False,
+        default="/Data/test_dataset/audio",
+        type=str,
+    )
 
-    
+    parser.add_argument(
+        "--results_path",
+        help="Path to the directory where subdirectory with results will be created/overwritten",
+        required=False,
+        default="results/",
+        type=str,
+    )
+
+    parser.add_argument(
+        "--model_path",
+        help="Path to the model weights",
+        required=False,
+        default="/app/assets/ckpt-epoch=21-val_loss=0.12-lr=0.005.ckpt",
+        type=str,
+    )
+
+    parser.add_argument(
+        "--config",
+        help="Path to the config file, required if non-default model_arguments were used",
+        required=False,
+        type=str,
+    )
+
+    cli_args = parser.parse_args()
+    if not cli_args.config is None:
+        with open(cli_args.config) as f:
+            config = yaml.load(f, Loader=yaml.loader.FullLoader)
+            model_arguments = {
+                "hop_length": config["FFT_HOP_LENGTH"],
+                "n_fft": config["FFT_N_FFT"],
+                "win_length": config["FFT_WIN_LENGTH"],
+                "window": config["FFT_WINDOW"],
+            }
+    else:
+        model_arguments = {}
+
+    # make a subfolder for this specific model in the results directory
+    model_identifier = remove_extension(cli_args.model_path)
+    results_path = os.path.join(cli_args.results_path, model_identifier)
+    if not os.path.exists(results_path):
+        os.makedirs(results_path)
+
+    test_model(
+        cli_args.audio_path,
+        cli_args.label_path,
+        results_path,
+        cli_args.model_path,
+        model_arguments,
+    )
