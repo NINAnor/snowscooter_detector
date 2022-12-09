@@ -5,6 +5,7 @@ import traceback
 import numpy as np
 import yaml
 import fs
+import tqdm
 
 from yaml import FullLoader
 
@@ -21,40 +22,54 @@ def doConnection(connection_string):
 
 def walk_audio(filesystem, input_path):
     # Get all files in directory with os.walk
-    walker = filesystem.walk(input_path, filter=['*.wav', '*.flac', '*.mp3', '*.ogg', '*.m4a', '*.WAV', '*.MP3'])
-    for path, dirs, flist in walker:
-        for f in flist:
-            yield fs.path.combine(path, f.name)
-
-def parseFolders(filesystem, apath, rpath):
-
-    # List the audio files / if pyfilesystem or not
-    if not filesystem:
-        audio_files = [f for f in glob.glob(apath + "/**/*", recursive=True) if os.path.isfile(f)]
-        audio_files = [f for f in audio_files if f.endswith( (".WAV", ".wav", ".mp3") )]
+    if filesystem:
+        walker = filesystem.walk(input_path, filter=['*.wav', '*.flac', '*.mp3', '*.ogg', '*.m4a', '*.WAV', '*.MP3'])
+        for path, dirs, flist in walker:
+            for f in flist:
+                yield fs.path.combine(path, f.name)
     else:
-        audio_files = []
-        for index, audiofile in enumerate(walk_audio(filesystem, apath)):
-            audio_files.append(audiofile)
+        for path, dirs, flist in os.walk(input_path):
+            for f in flist:
+                yield os.path.join(path, f)
+
+def parseFolders(filesystem, apath, rpath, workers, worker_idx, array_job="False"):
+
+    afiles = []
+    rfiles = []
+
+    print("Worker {}".format(workers))
+    print("Worker_idx {}".format(worker_idx))
+
+    if array_job == "True":
+        for index, afile in enumerate(walk_audio(filesystem, apath)):
+            if index%workers == worker_idx:
+                afiles.append(afile)
+        for index, rfile in enumerate(walk_audio(False, rpath)):
+            if index%workers == worker_idx:
+                rfiles.append(rfile)
+    else:
+        for index, afile in enumerate(walk_audio(filesystem, apath)):
+            if index%workers == worker_idx:
+                afiles.append(afile)
+        for index, rfile in enumerate(walk_audio(False, rpath)):
+            if index%workers == worker_idx:
+                rfiles.append(rfile)
 
     # Create a list of audiofiles without the file extension
     audio_no_extension = []
-    for audio_file in audio_files:
-        audio_file_no_extension = remove_extension(audio_file)
-        audio_no_extension.append(audio_file_no_extension)
-
-    # List all the result files
-    result_files = [f for f in glob.glob(rpath + "/**/*", recursive = True) if os.path.isfile(f)]
+    for afile in afiles:
+        afile_no_extension = remove_extension(afile)
+        audio_no_extension.append(afile_no_extension)
 
     # Compare with the audio files, if in it then add to the dictionary
     flist = []
-    for result in result_files:
+    for result in rfiles:
         result_no_extension = remove_extension(result)
         is_in = result_no_extension in audio_no_extension
 
         if is_in:
             audio_idx = audio_no_extension.index(result_no_extension)
-            pair = {'audio': audio_files[audio_idx], 'result': result}
+            pair = {'audio': afiles[audio_idx], 'result': result}
             flist.append(pair)
         else:
             continue
@@ -168,7 +183,7 @@ def extractSegments(item, sample_rate, out_path, filesystem, seg_length=3):
                 seg_sig = sig[int(start):int(end)]
 
                 # Make output path
-                outpath = os.path.join(out_path, seg['label'])
+                outpath = os.sep.join([out_path, os.path.dirname(afile)])
                 if not os.path.exists(outpath):
                     os.makedirs(outpath, exist_ok=True)
 
@@ -187,7 +202,7 @@ def extractSegments(item, sample_rate, out_path, filesystem, seg_length=3):
             msg = 'Error: Cannot extract segments from {}.\n{}'.format(afile, traceback.format_exc())
             print(msg, flush=True)
             #writeErrorLog(msg)
-            break
+            #break
 
 if __name__ == '__main__':
 
@@ -199,7 +214,10 @@ if __name__ == '__main__':
                         required=False,
                         type=str,
                         )
-
+    parser.add_argument('--workers', type=int, default=1, help='Number of workers')
+    parser.add_argument('--worker_index', type=int, default=0, help='Worker index')
+    parser.add_argument("--array_job", help='Are you submitted an array job?', default=False, required=False, type=str)
+    
     cli_args = parser.parse_args()
 
     # Open the config file
@@ -209,8 +227,8 @@ if __name__ == '__main__':
     # Do the connection to server
     myfs = doConnection(cfg["CONNECTION_STRING"])
 
-    # Parse audio and result folders
-    parsed_folders = parseFolders(myfs, cfg["INPUT_PATH"], cfg["OUTPUT_PATH"])
+    # Parse the folders
+    parsed_folders = parseFolders(myfs, cfg["INPUT_PATH"], cfg["OUTPUT_PATH"], cli_args.workers, cli_args.worker_index, cli_args.array_job)
 
     # Parse file list and make list of segments
     parsed_files = parseFiles(parsed_folders, cfg["NUM_SEGMENTS"], cfg["THRESHOLD"])
@@ -221,5 +239,5 @@ if __name__ == '__main__':
         flist.append(entry)
     
     # Extract segments   
-    for entry in flist:
+    for entry in tqdm.tqdm(flist):
         extractSegments(entry, cfg["SAMPLE_RATE"], cfg["OUT_PATH_SEGMENTS"], myfs)
