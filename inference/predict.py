@@ -62,11 +62,11 @@ def parseInputFiles(filesystem, input_path, workers, worker_idx, array_job=False
     return files
 
 def initModel(model_path, device):
-    model = CustomAudioCLIP(num_target_classes=2).to(device)
+    model = CustomAudioCLIP(num_target_classes=2)
     model = model.load_from_checkpoint(model_path, num_target_classes=2)
     model.eval()
     #m_q = quantize_dynamic(m, qconfig_spec={torch.nn.Linear, torch.nn.Conv2d}, dtype=torch.qint8)
-    return model
+    return model.to(device)
 
 def compute_hr(array):
 
@@ -108,7 +108,7 @@ def predict(testLoader, model, device, threshold=0.95):
 
     return proba_list, hr_list
 
-def get_outname(input, outfolder):
+def get_outname(input, out_path):
 
     # Get a name for the output // if there are multiple "." in the list
     # only remove the extension
@@ -119,19 +119,13 @@ def get_outname(input, outfolder):
         filename = input.split("/")[-1].split(".")[0]
 
     # Make folder if it doesn't exist
-    input_path = os.path.dirname(input)
-    diff = os.path.relpath(input_path, outfolder).split("/")[2:]
-    diff = "/".join(diff)
+    outpath = os.sep.join([out_path, os.path.dirname(input)])
+    if not os.path.exists(outpath):
+        os.makedirs(outpath, exist_ok=True)
 
-    outpath = os.sep.join([outfolder, diff])
-    print(outpath)
+    file_path = os.path.join(outpath, filename + '.csv')
 
-    if len(outpath) > 0 and not os.path.exists(outpath):
-        os.makedirs(outpath)
-
-    outname = os.sep.join([outpath, filename + '.csv'])
-
-    return outname
+    return file_path
 
 def write_results(prob_audioclip_array, hr_array, outname):
 
@@ -228,6 +222,11 @@ if __name__ == "__main__":
     # Initiate model
     model = initModel(model_path=cfg["MODEL"], device=cfg["DEVICE"])
 
+    if next(model.parameters()).is_cuda:
+        print("Model on GPU")
+    else:
+        print("Model on CPU")
+
     # Do the connection to server
     print("Connecting to {}".format(cfg["CONNECTION_STRING"]))
     myfs = doConnection(cfg["CONNECTION_STRING"])
@@ -245,4 +244,4 @@ if __name__ == "__main__":
         try:
             analyzeFile(myfs, entry, model, cfg["OUTPUT_PATH"],  device=cfg["DEVICE"], batch_size=1, num_workers=1)
         except:
-            #print("File {} failed to be analyzed".format(entry))
+            print("File {} failed to be analyzed".format(entry))
