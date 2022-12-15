@@ -14,12 +14,17 @@ from yaml import FullLoader
 from utils.audio_processing import openCachedFile, openAudioFile, saveSignal
 from utils.parsing_utils import remove_extension
 
-def read_db(db_path, conf, hr, n_segments):
+def read_db(db_path, query, n_segments):
 
+    # Initiate and connect to the engine
     engine=sqlalchemy.create_engine(db_path)
     connection=engine.connect()
-    query = "SELECT * FROM [/home/benjamin.cretois/Code/AudioCLIP/assets/db.sqlite] WHERE conf_agg > {} AND hr_agg > {}".format(conf, hr)
+
+    # Filter the results given the query and store in a pandas DF
     df = pd.read_sql_query(query, connection)
+    print("A total of {} detections have been found".format(len(df)))
+
+    # Subsample pandas DF for extracting n_segments
     sampled_df = df.sample(n_segments)
 
     return sampled_df
@@ -114,7 +119,7 @@ if __name__ == '__main__':
     myfs = doConnection(cfg["CONNECTION_STRING"])
 
     # Read the database and convert into a pandas dataframe
-    df = read_db(cfg['DB_PATH'], cfg['THRESHOLD_CONF'], cfg['THRESHOLD_HR'], cfg['NUM_SEGMENTS'])
+    df = read_db(cfg['DB_PATH'], cfg['QUERY'], cfg['NUM_SEGMENTS'])
 
     # Parse the files
     parsedfiles = parseAudioFiles(myfs, cfg["INPUT_PATH"])
