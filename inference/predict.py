@@ -1,23 +1,20 @@
 import argparse
 import datetime
+import os
+
 import numpy as np
 import torch
-import os
-import glob
+from torch.utils.data import DataLoader
 import yaml
+from yaml.loader import FullLoader
 import csv
 import fs
 import tqdm
-
-from torch.quantization import quantize_dynamic
-from torch.utils.data import DataLoader
-from yaml.loader import FullLoader
-from multiprocessing import Pool
-from fs.sshfs import SSHFS
 from model.custom_model import CustomAudioCLIP
 
 from utils.utils_inference import AudioList
 from utils.audio_signal import AudioSignal
+
 
 def doConnection(connection_string):
 
@@ -27,10 +24,14 @@ def doConnection(connection_string):
         myfs = fs.open_fs(connection_string)
     return myfs
 
+
 def walk_audio(filesystem, input_path):
     # Get all files in directory with os.walk
     if filesystem:
-        walker = filesystem.walk(input_path, filter=['*.wav', '*.flac', '*.mp3', '*.ogg', '*.m4a', '*.WAV', '*.MP3'])
+        walker = filesystem.walk(
+            input_path,
+            filter=["*.wav", "*.flac", "*.mp3", "*.ogg", "*.m4a", "*.WAV", "*.MP3"],
+        )
         for path, dirs, flist in walker:
             for f in flist:
                 yield fs.path.combine(path, f.name)
@@ -39,50 +40,52 @@ def walk_audio(filesystem, input_path):
             for f in flist:
                 yield os.path.join(path, f)
 
+
 def parseInputFiles(filesystem, input_path, workers, worker_idx, array_job=False):
 
     files = []
-    include = ('.wav', '.flac', '.mp3', '.ogg', '.m4a', '.WAV', '.MP3')
+    include = (".wav", ".flac", ".mp3", ".ogg", ".m4a", ".WAV", ".MP3")
 
     print("Worker {}".format(workers))
     print("Worker_idx {}".format(worker_idx))
 
     if array_job:
         for index, audiofile in enumerate(walk_audio(filesystem, input_path)):
-            if index%workers == worker_idx:
+            if index % workers == worker_idx:
                 files.append(audiofile)
     else:
         for index, audiofile in enumerate(walk_audio(filesystem, input_path)):
             files.append(audiofile)
 
     files = [file for file in files if file.endswith(include)]
-            
-    print('Found {} files to analyze'.format(len(files)))
+
+    print("Found {} files to analyze".format(len(files)))
 
     return files
+
 
 def initModel(model_path, device):
     model = CustomAudioCLIP(num_target_classes=2)
     model = model.load_from_checkpoint(model_path, num_target_classes=2)
     model.eval()
-    #m_q = quantize_dynamic(m, qconfig_spec={torch.nn.Linear, torch.nn.Conv2d}, dtype=torch.qint8)
+
     return model.to(device)
+
 
 def compute_hr(array):
 
-    signal = AudioSignal(samples = array, fs=44100)
+    signal = AudioSignal(samples=array, fs=44100)
 
-    signal.apply_butterworth_filter(
-            order=18, Wn=np.asarray([1, 600]) / (signal.fs / 2)
-        )
+    signal.apply_butterworth_filter(order=18, Wn=np.asarray([1, 600]) / (signal.fs / 2))
     signal_hr = signal.harmonic_ratio(
-            win_length=int(1 * signal.fs),
-            hop_length=int(0.1 * signal.fs),
-            window="hamming",
-        )
+        win_length=int(1 * signal.fs),
+        hop_length=int(0.1 * signal.fs),
+        window="hamming",
+    )
     hr = np.mean(signal_hr)
-    
+
     return hr
+
 
 def predict(testLoader, model, device, threshold=0.95):
 
@@ -108,6 +111,7 @@ def predict(testLoader, model, device, threshold=0.95):
 
     return proba_list, hr_list
 
+
 def get_outname(input, out_path):
 
     # Get a name for the output // if there are multiple "." in the list
@@ -123,9 +127,10 @@ def get_outname(input, out_path):
     if not os.path.exists(outpath):
         os.makedirs(outpath, exist_ok=True)
 
-    file_path = os.path.join(outpath, filename + '.csv')
+    file_path = os.path.join(outpath, filename + ".csv")
 
     return file_path
+
 
 def write_results(prob_audioclip_array, hr_array, outname):
 
@@ -150,7 +155,7 @@ def write_results(prob_audioclip_array, hr_array, outname):
         # Update the start time of the detection
         idx_begin = idx_end
 
-    with open(outname, 'w') as file:
+    with open(outname, "w") as file:
 
         writer = csv.writer(file)
         header = ["start_detection", "end_detection", "label", "confidence", "hr"]
@@ -158,7 +163,10 @@ def write_results(prob_audioclip_array, hr_array, outname):
         writer.writerow(header)
         writer.writerows(rows_for_csv)
 
-def analyzeFile(filesystem, file_path, model, out_folder, device, batch_size=1, num_workers=1):
+
+def analyzeFile(
+    filesystem, file_path, model, out_folder, device, batch_size=1, num_workers=1
+):
     # Start time
     start_time = datetime.datetime.now()
 
@@ -170,48 +178,55 @@ def analyzeFile(filesystem, file_path, model, out_folder, device, batch_size=1, 
     else:
         # Run the predictions
         list_preds = AudioList().get_processed_list(filesystem, file_path)
-        predLoader = DataLoader(list_preds, batch_size=batch_size, num_workers=num_workers, pin_memory=False)
+        predLoader = DataLoader(
+            list_preds, batch_size=batch_size, num_workers=num_workers, pin_memory=False
+        )
 
-        pred_audioclip_array, pred_hr_array  = predict(predLoader, model, device)
+        pred_audioclip_array, pred_hr_array = predict(predLoader, model, device)
         write_results(pred_audioclip_array, pred_hr_array, outname)
 
         # Give the tim it took to analyze file
         delta_time = (datetime.datetime.now() - start_time).total_seconds()
-        print('Finished {} in {:.2f} seconds'.format(file_path, delta_time), flush=True)
+        print("Finished {} in {:.2f} seconds".format(file_path, delta_time), flush=True)
+
 
 if __name__ == "__main__":
 
     # Get the config for doing the predictions
-   # FOR TESTING THE PIPELINE WITH ONE FILE
+    # FOR TESTING THE PIPELINE WITH ONE FILE
     parser = argparse.ArgumentParser()
 
-    parser.add_argument("--config",
-                        help='Path to the config file',
-                        default="/app/config_inference.yaml",
-                        required=False,
-                        type=str,
-                        )
+    parser.add_argument(
+        "--config",
+        help="Path to the config file",
+        default="config_inference.yaml",
+        required=False,
+        type=str,
+    )
 
-    parser.add_argument("--num_worker",
-                        help='Path to the config file',
-                        default=1,
-                        required=False,
-                        type=int,
-                        )
+    parser.add_argument(
+        "--num_worker",
+        help="Number of workers for reading in audiofiles",
+        default=1,
+        required=False,
+        type=int,
+    )
 
-    parser.add_argument("--worker_index",
-                        help='Path to the config file',
-                        default=1,
-                        required=False,
-                        type=int,
-                        )
+    parser.add_argument(
+        "--worker_index",
+        help="Index of worker, only relevant for array jobs",
+        default=1,
+        required=False,
+        type=int,
+    )
 
-    parser.add_argument("--array_job",
-                        help='Are you submitted an array job?',
-                        default=False,
-                        required=False,
-                        type=str,
-                        )
+    parser.add_argument(
+        "--array_job",
+        help="Are you submitting an array job?",
+        default=False,
+        required=False,
+        type=str,
+    )
 
     cli_args = parser.parse_args()
 
@@ -231,17 +246,28 @@ if __name__ == "__main__":
     print("Connecting to {}".format(cfg["CONNECTION_STRING"]))
     myfs = doConnection(cfg["CONNECTION_STRING"])
 
-    file_list = parseInputFiles(myfs, cfg["INPUT_PATH"], cli_args.num_worker, cli_args.worker_index, array_job=cli_args.array_job)  
+    flist = parseInputFiles(
+        myfs,
+        cfg["INPUT_PATH"],
+        cli_args.num_worker,
+        cli_args.worker_index,
+        array_job=cli_args.array_job,
+    )
 
-    flist = []
-    for f in file_list:
-        flist.append(f)
     print("Found {} files to analyze".format(len(flist)))
 
     # Analyze files
     for entry in tqdm.tqdm(flist):
         print("Analysing {}".format(entry))
         try:
-            analyzeFile(myfs, entry, model, cfg["OUTPUT_PATH"],  device=cfg["DEVICE"], batch_size=1, num_workers=1)
+            analyzeFile(
+                myfs,
+                entry,
+                model,
+                cfg["OUTPUT_PATH"],
+                device=cfg["DEVICE"],
+                batch_size=1,
+                num_workers=1,
+            )
         except:
             print("File {} failed to be analyzed".format(entry))
