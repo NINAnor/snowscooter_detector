@@ -24,11 +24,16 @@ def preprocess_with_one_sound(arr, sr, directory, min_db, max_db, p_sound=1):
 def preprocess_file(audio_path, noise_dir, min_db, max_db, length_segments=3):
  
     arr, sr = openAudioFile(audio_path)
-    arr_selected = arr[0:int(length_segments*sr)]
+    chunks = splitSignal(arr, sr, length_segments, 0, length_segments)
 
-    mixed_array = preprocess_with_one_sound(arr_selected, sr, noise_dir, min_db, max_db)
-
-    return mixed_array, sr
+    # Randomly sample a chunk of "length_segments" seconds
+    if len(chunks) > 1:
+        r_number = random.randint(0, len(chunks)-1)
+        r_chunk = chunks[r_number]
+        mixed_array = preprocess_with_one_sound(r_chunk, sr, noise_dir, min_db, max_db)
+        return mixed_array, r_chunk, sr
+    else:
+        print("The provided file is not long enough")
 
 def save_processed_arrays(arr, sr, outname):
     soundfile.write(outname, arr, sr)
@@ -72,7 +77,7 @@ if __name__ == "__main__":
                         )
 
     parser.add_argument("--min_absolute_rms_in_db",
-                        default=15.0,
+                        default=30.0,
                         required=False,
                         type=float,
                         )
@@ -102,16 +107,17 @@ if __name__ == "__main__":
         outpath_no_mix = os.path.join(cli_args.save_dir_no_mix, file_name)
 
         # Create the file and save
-        arr_mix, sr_mix = preprocess_file(fpath, 
-            cli_args.folder_birds, 
-            neg_min_db,
-            neg_max_db,
-            cli_args.l_mix)
+        try:
+            arr_mix, r_chunk, sr = preprocess_file(fpath, 
+                cli_args.folder_birds, 
+                neg_min_db,
+                neg_max_db,
+                cli_args.l_mix)
 
-        arr, sr = openAudioFile(fpath)
-
-        save_processed_arrays(arr_mix, sr_mix, outpath_mix)
-        save_processed_arrays(arr, sr, outpath_no_mix)
+            save_processed_arrays(arr_mix, sr, outpath_mix)
+            save_processed_arrays(r_chunk, sr, outpath_no_mix)
+        except:
+            print("Could not process the input file")
 
     # python snowscooter_vs_birds/mix_birds_snowscooter.py
 
