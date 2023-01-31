@@ -92,32 +92,42 @@ if __name__ == "__main__":
             default=100,
             required=False,
             type=int,
-            )            
+            )   
+
+    parser.add_argument("--n_iterations",
+        default=1,
+        required=False,
+        type=int,
+        )           
     cli_args = parser.parse_args()
 
     neg_min_db = - cli_args.min_absolute_rms_in_db
     neg_max_db = - cli_args.max_absolute_rms_in_db
 
-    snowscooter_files = random.sample(glob(cli_args.folder_snowscooter + "/*.wav"), cli_args.n_files)
+    for it in range(cli_args.n_iterations):
+        print(f"Iteration number: {it+1}")
 
-    for i, fpath in enumerate(snowscooter_files):
-        # Create a name / output path for the file
-        file_name = f"file_{i}.wav"
-        outpath_mix = os.path.join(cli_args.save_dir_mix, file_name)
-        outpath_no_mix = os.path.join(cli_args.save_dir_no_mix, file_name)
+        snowscooter_files = random.sample(glob(cli_args.folder_snowscooter + "/*.wav"), cli_args.n_files)
 
-        # Create the file and save
-        try:
-            arr_mix, r_chunk, sr = preprocess_file(fpath, 
-                cli_args.folder_birds, 
-                neg_min_db,
-                neg_max_db,
-                cli_args.l_mix)
+        for i, fpath in enumerate(snowscooter_files):
+            # Create a name / output path for the file
+            i = i * (it + 1)
+            file_name = f"file_{i}.wav"
+            outpath_mix = os.path.join(cli_args.save_dir_mix, file_name)
+            outpath_no_mix = os.path.join(cli_args.save_dir_no_mix, file_name)
 
-            save_processed_arrays(arr_mix, sr, outpath_mix)
-            save_processed_arrays(r_chunk, sr, outpath_no_mix)
-        except:
-            print("Could not process the input file")
+            # Create the file and save
+            try:
+                arr_mix, r_chunk, sr = preprocess_file(fpath, 
+                    cli_args.folder_birds, 
+                    neg_min_db,
+                    neg_max_db,
+                    cli_args.l_mix)
+
+                save_processed_arrays(arr_mix, sr, outpath_mix)
+                save_processed_arrays(r_chunk, sr, outpath_no_mix)
+            except:
+                print("Could not process the input file")
 
     # python snowscooter_vs_birds/mix_birds_snowscooter.py
 
