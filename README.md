@@ -1,4 +1,4 @@
-<h1 align="center"> :snowflake: SnowScooterDetector :snowflake: </h1>
+<h1 align="center"> :snowflake: SnowScooterDetector ****THIS REPOSITORY IS DEPRECATED. IF YOU WANT TO RUN THE SNOWMOBILE MODEL ON YOUR DATA PLEASE REFER TO THE FOLLOWING REPO: https://github.com/NINAnor/snowmobile_analyzer**** </h1>
 
 ![CC BY-NC-SA 4.0][license-badge]
 ![Supported OS][os-badge]
@@ -6,7 +6,6 @@
 [license-badge]: https://badgen.net/badge/License/CC-BY-NC-SA%204.0/green
 [os-badge]: https://badgen.net/badge/OS/Linux%2C%20Windows/blue
 
-**THIS REPOSITORY IS DEPRECATED. IF YOU WANT TO RUN THE SNOWMOBILE MODEL ON YOUR DATA PLEASE REFER TO THE FOLLOWING REPO: https://github.com/NINAnor/snowmobile_analyzer**
 
 ## Usage
 
